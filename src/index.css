@@ -1,0 +1,206 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 49% 8%;
+    --foreground: 220 14% 90%;
+
+    --card: 218 32% 15%;
+    --card-foreground: 220 14% 90%;
+
+    --popover: 221 39% 11%;
+    --popover-foreground: 220 14% 90%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 221 39% 11%;
+    --secondary-foreground: 220 14% 90%;
+
+    --muted: 218 24% 18%;
+    --muted-foreground: 220 9% 65%;
+
+    --accent: 198 93% 60%;
+    --accent-foreground: 220 49% 8%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 219 26% 22%;
+    --input: 219 26% 22%;
+    --ring: 239 84% 67%;
+    --info: 198 93% 60%;
+
+    --radius: 0.9rem;
+
+    --quantum-violet: 258 90% 66%;
+    --quantum-cyan: 198 93% 60%;
+    --quantum-info: 198 93% 60%;
+    --quantum-navy: 220 49% 8%;
+    --quantum-navy-light: 221 39% 11%;
+    --quantum-success: 142 71% 45%;
+    --quantum-warning: 38 92% 50%;
+    --quantum-danger: 0 84% 60%;
+    --quantum-teal: 173 80% 40%;
+    --quantum-orange: 25 95% 53%;
+    --quantum-emerald: 160 84% 39%;
+    --quantum-slate: 215 16% 47%;
+
+    --quantum-glow-primary: 0 0 16px rgba(99, 102, 241, 0.38);
+    --quantum-glow-info: 0 0 16px rgba(56, 189, 248, 0.28);
+    --quantum-glow-success: 0 0 14px rgba(34, 197, 94, 0.24);
+
+    --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+      rgba(26, 35, 51, 0.82);
+    --glass-border: rgba(42, 52, 71, 0.95);
+    --glass-highlight: rgba(255, 255, 255, 0.055);
+
+    --sidebar-background: 221 39% 11%;
+    --sidebar-foreground: 220 9% 72%;
+    --sidebar-primary: 239 84% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 218 32% 15%;
+    --sidebar-accent-foreground: 220 14% 90%;
+    --sidebar-border: 219 26% 22%;
+    --sidebar-ring: 239 84% 67%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at top left, rgba(56, 189, 248, 0.08), transparent 28%),
+      radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 34%),
+      linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(11, 18, 32, 1));
+    font-family: 'Inter', sans-serif;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl border shadow-[0_10px_30px_rgba(2,6,23,0.32)];
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+    backdrop-filter: blur(16px);
+  }
+
+  .glass-card::before {
+    content: '';
+    @apply absolute inset-0 rounded-xl pointer-events-none;
+    background: linear-gradient(135deg, var(--glass-highlight) 0%, transparent 48%);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+
+  .glass-card-hover:hover {
+    border-color: rgba(99, 102, 241, 0.55);
+    box-shadow: var(--quantum-glow-primary);
+  }
+
+  .page-header {
+    @apply space-y-2;
+  }
+
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-foreground;
+  }
+
+  .page-subtitle {
+    @apply mt-1 max-w-3xl text-base leading-relaxed text-muted-foreground;
+  }
+
+  .section-header {
+    @apply mb-6 space-y-2;
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-foreground;
+  }
+
+  .section-subtitle {
+    @apply text-base leading-relaxed text-muted-foreground;
+  }
+
+  .glow-text-violet {
+    color: hsl(var(--quantum-violet));
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.35);
+  }
+
+  .glow-text-cyan {
+    color: hsl(var(--quantum-cyan));
+    text-shadow: 0 0 20px rgba(56, 189, 248, 0.28);
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--info)), hsl(var(--primary)), hsl(var(--quantum-violet)));
+  }
+
+  .quantum-border-gradient {
+    border: 1px solid transparent;
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    background-image:
+      linear-gradient(hsl(var(--card)), hsl(var(--card))),
+      linear-gradient(135deg, rgba(99, 102, 241, 0.55), rgba(56, 189, 248, 0.28));
+  }
+
+  .soft-glow-hover {
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+  }
+
+  .soft-glow-hover:hover {
+    border-color: rgba(99, 102, 241, 0.45);
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+  }
+
+  .kpi-delta-up {
+    color: hsl(var(--quantum-success));
+  }
+
+  .kpi-delta-down {
+    color: hsl(var(--quantum-danger));
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(42, 52, 71, 0.95) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(42, 52, 71, 0.95);
+    border-radius: 3px;
+  }
+}
+
+.quantum-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}

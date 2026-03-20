@@ -1,0 +1,14 @@
+export { default as ActivityTimeline } from "@/components/pipeline/ActivityTimeline";
+export { default as AIInsightPanel } from "@/components/pipeline/AIInsightPanel";
+export { default as AddLeadModal } from "@/components/pipeline/actions/AddLeadModal";
+export { default as CreateOpportunityModal } from "@/components/pipeline/actions/CreateOpportunityModal";
+export { default as DealCard } from "@/components/pipeline/DealCard";
+export { default as FilterToolbar } from "@/components/pipeline/FilterToolbar";
+export { default as ImportLeadsModal } from "@/components/pipeline/actions/ImportLeadsModal";
+export { default as KPIStatsBar } from "@/components/pipeline/KPIStatsBar";
+export { default as LeadDetailsDrawer } from "@/components/pipeline/LeadDetailsDrawer";
+export { default as PipelineBoard } from "@/components/pipeline/PipelineBoard";
+export { default as PipelineColumn } from "@/components/pipeline/PipelineColumn";
+export { default as ScheduleDemoModal } from "@/components/pipeline/actions/ScheduleDemoModal";
+export { PipelineProvider, usePipelineData } from "@/components/pipeline/PipelineProvider";
+export { default as PipelineWorkspace } from "@/components/pipeline/PipelineWorkspace";

@@ -1,0 +1,423 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  leads     Lead[]
+
+  @@map("team_members")
+}
+
+model Lead {
+  id                String        @id @default(cuid())
+  leadName          String        @map("lead_name")
+  companyName       String        @map("company_name")
+  contactName       String        @map("contact_name")
+  designation       String?
+  email             String?
+  phone             String?
+  industry          String?
+  leadSource        String        @map("lead_source")
+  status            String
+  leadOwnerId       String        @map("lead_owner_id")
+  leadOwner         TeamMember    @relation(fields: [leadOwnerId], references: [id])
+  companySize       String?       @map("company_size")
+  website           String?
+  city              String?
+  country           String?
+  location          String?
+  region            String?
+  priority          String        @default("Medium")
+  productInterest   String?       @map("product_interest")
+  dealValue         Float?        @map("deal_value")
+  expectedCloseDate DateTime?     @map("expected_close_date")
+  probability       Int           @default(25)
+  budget            String?
+  authority         String?
+  need              String?
+  timeline          String?
+  lastActivityDate  DateTime?     @map("last_activity_date")
+  nextFollowUpDate  DateTime?     @map("next_follow_up_date")
+  notes             String?
+  companyId         String?       @map("company_id")
+  company           Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  opportunities     Opportunity[]
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([leadOwnerId])
+  @@index([companyName])
+  @@index([leadSource])
+  @@index([companyId])
+  @@map("leads")
+}
+
+model Company {
+  id             String        @id @default(cuid())
+  companyName    String        @unique @map("company_name")
+  industry       String?
+  website        String?
+  city           String?
+  country        String?
+  primaryContact String?       @map("primary_contact")
+  phone          String?
+  email          String?
+  accountOwner   String        @map("account_owner")
+  status         String
+  notes          String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  leads          Lead[]
+  contacts       Contact[]
+  opportunities  Opportunity[]
+  orders         Order[]
+  demoTrials     DemoTrial[]
+
+  @@index([companyName])
+  @@index([industry])
+  @@index([accountOwner])
+  @@map("companies")
+}
+
+model Contact {
+  id            String   @id @default(cuid())
+  companyId     String   @map("company_id")
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  jobTitle      String?  @map("job_title")
+  department    String?
+  email         String?
+  phone         String?
+  decisionMaker Boolean  @default(false) @map("decision_maker")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([companyId])
+  @@index([name])
+  @@map("contacts")
+}
+
+model Opportunity {
+  id                String   @id @default(cuid())
+  companyId         String?  @map("company_id")
+  company           Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  leadId            String?  @map("lead_id")
+  lead              Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  opportunityName   String   @map("opportunity_name")
+  stage             String
+  dealValue         Float    @map("deal_value")
+  probability       Int
+  expectedCloseDate DateTime @map("expected_close_date")
+  owner             String
+  status            String
+  productService    String   @map("product_service")
+  competitors       Json?
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  orders            Order[]
+
+  @@index([companyId])
+  @@index([leadId])
+  @@index([stage])
+  @@index([owner])
+  @@index([expectedCloseDate])
+  @@map("opportunities")
+}
+
+model Order {
+  id               String         @id @default(cuid())
+  orderId          String         @unique @map("order_id")
+  companyId        String         @map("company_id")
+  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunityId    String?        @map("opportunity_id")
+  opportunity      Opportunity?   @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  productService   String         @map("product_service")
+  orderValue       Float          @map("order_value")
+  currency         String
+  orderDate        DateTime       @map("order_date")
+  startDate        DateTime       @map("start_date")
+  completionDate   DateTime?      @map("completion_date")
+  status           String
+  accountManager   String         @map("account_manager")
+  notes            String?
+  advanceAmount    Float          @default(0) @map("advance_amount")
+  amountPaid       Float          @default(0) @map("amount_paid")
+  balanceAmount    Float          @default(0) @map("balance_amount")
+  paymentStatus    String         @default("Pending") @map("payment_status")
+  invoiceNumber    String?        @map("invoice_number")
+  paymentDueDate   DateTime?      @map("payment_due_date")
+  renewalDate      DateTime?      @map("renewal_date")
+  renewalStatus    String?        @map("renewal_status")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  implementation   Implementation?
+  invoices         Invoice[]
+  payments         Payment[]
+  renewals         Renewal[]
+
+  @@index([companyId])
+  @@index([opportunityId])
+  @@index([status])
+  @@index([accountManager])
+  @@index([paymentStatus])
+  @@index([renewalDate])
+  @@map("orders")
+}
+
+model Implementation {
+  id                 String   @id @default(cuid())
+  orderId            String   @unique @map("order_id")
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  implementationType String   @map("implementation_type")
+  projectOwner       String   @map("project_owner")
+  technicalLead      String   @map("technical_lead")
+  progress           Int      @default(0)
+  status             String
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("implementation")
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  orderId       String    @map("order_id")
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoiceNumber String    @map("invoice_number")
+  amount        Float
+  invoiceDate   DateTime  @map("invoice_date")
+  paymentStatus String    @map("payment_status")
+  paymentDate   DateTime? @map("payment_date")
+  fileUrl       String?   @map("file_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  payments      Payment[]
+
+  @@index([orderId])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+model Payment {
+  id         String    @id @default(cuid())
+  orderId    String    @map("order_id")
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoiceId  String?   @map("invoice_id")
+  invoice    Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  amount     Float
+  paymentDate DateTime @map("payment_date")
+  status     String
+  receivedBy String    @map("received_by")
+  reference  String
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model Renewal {
+  id               String    @id @default(cuid())
+  orderId          String    @map("order_id")
+  order            Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  renewalDate      DateTime  @map("renewal_date")
+  renewalValue     Float     @map("renewal_value")
+  contractDuration String    @map("contract_duration")
+  renewalType      String    @map("renewal_type")
+  status           String
+  autoRenewal      Boolean   @default(false) @map("auto_renewal")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([renewalDate])
+  @@map("renewals")
+}
+
+model Activity {
+  id           String   @id @default(cuid())
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  type         String   @map("activity_type")
+  title        String
+  description  String?
+  createdBy    String   @map("owner")
+  activityDate DateTime @map("activity_date")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([activityDate])
+  @@map("activities")
+}
+
+model Interaction {
+  id           String    @id @default(cuid())
+  entityType   String    @map("entity_type")
+  entityId     String    @map("entity_id")
+  type         String
+  summary      String
+  details      String?
+  nextFollowUp DateTime? @map("next_follow_up")
+  createdBy    String    @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([nextFollowUp])
+  @@index([createdAt])
+  @@map("interactions")
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  assignedTo  String   @map("assigned_to")
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  sourceInteractionId String? @map("source_interaction_id")
+  dueDate     DateTime @map("due_date")
+  status      String   @default("pending")
+  priority    String   @default("medium")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([assignedTo])
+  @@index([dueDate])
+  @@index([sourceInteractionId])
+  @@map("tasks")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  actionUrl  String?  @map("action_url")
+  severity   String   @default("info")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, read])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
+model EmailLog {
+  id         String   @id @default(cuid())
+  to         String
+  subject    String
+  body       String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  sentAt     DateTime @default(now()) @map("sent_at")
+
+  @@index([entityType, entityId])
+  @@map("email_logs")
+}
+
+model PipelineStage {
+  id         String   @id @default(cuid())
+  name       String
+  entityType String   @map("entity_type")
+  order      Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType])
+  @@map("pipeline_stages")
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String
+  body      String
+  type      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@map("email_templates")
+}
+
+model AutomationRule {
+  id        String   @id @default(cuid())
+  name      String
+  trigger   String
+  action    String
+  config    Json?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([trigger])
+  @@map("automation_rules")
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  fileName   String   @map("file_name")
+  fileUrl    String   @map("file_url")
+  uploadedBy String   @map("uploaded_by")
+  fileType   String?  @map("file_type")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("documents")
+}
+
+model DemoTrial {
+  id         String    @id @default(cuid())
+  companyId  String?   @map("company_id")
+  company    Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyName String   @map("company_name")
+  trialStart DateTime  @map("trial_start")
+  trialEnd   DateTime  @map("trial_end")
+  accuracy   Int
+  engagement Int
+  feedback   Float
+  status     String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([companyId])
+  @@index([status])
+  @@map("demo_trials")
+}
