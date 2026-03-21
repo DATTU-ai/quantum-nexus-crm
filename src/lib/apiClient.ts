@@ -1,4 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "https://dattu-crm-backend.onrender.com/api";
 const TOKEN_STORAGE_KEY = "dattu.crm.token";
 const RETURN_URL_KEY = "dattu.crm.returnUrl";
 const AUTH_REDIRECT_EVENT = "crm:auth-required";
@@ -21,9 +24,7 @@ const isRootApiPath = (value: string) =>
   value === "/ai" ||
   value.startsWith("/ai/") ||
   value === "/alerts" ||
-  value.startsWith("/alerts/") ||
-  value === "/public" ||
-  value.startsWith("/public/");
+  value.startsWith("/alerts/");
 
 export const getStoredAuthToken = () => {
   if (typeof window === "undefined") return null;

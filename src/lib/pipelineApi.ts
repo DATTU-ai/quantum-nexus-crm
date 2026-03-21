@@ -1,6 +1,6 @@
 export const pipeline_api_endpoints = {
-  publicLeads: "/public/leads",
-  publicLead: (id: string) => `/public/leads/${id}`,
+  publicLeads: "/api/leads",
+  publicLead: (id: string) => `/api/leads/${id}`,
   leads: "/leads",
   lead: (id: string) => `/leads/${id}`,
   importLeads: "/leads/import",
