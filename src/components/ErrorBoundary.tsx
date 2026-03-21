@@ -11,14 +11,14 @@ class ErrorBoundary extends React.Component<any, any> {
   }
 
   componentDidCatch(error: any, info: any) {
-    console.error("React Error:", error, info);
+    console.error("UI Crash:", error, info);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: "40px", color: "white" }}>
-          CRM UI crashed. Check console.
+        <div className="text-red-500 p-4">
+          Something went wrong. Reload page.
         </div>
       );
     }
@@ -28,3 +28,4 @@ class ErrorBoundary extends React.Component<any, any> {
 }
 
 export default ErrorBoundary;
+

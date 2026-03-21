@@ -1,10 +1,7 @@
 ﻿import { useEffect, useMemo, useState, type ElementType } from "react";
 import { motion } from "framer-motion";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -30,11 +27,12 @@ import {
 import { format, formatDistanceToNow, isToday } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import AIInsights from "@/components/dashboard/AIInsights";
+import AgentAlertsPanel from "@/components/dashboard/AgentAlertsPanel";
+import SalesFunnel from "@/components/dashboard/SalesFunnel";
 import { Button } from "@/components/ui/button";
-import { createAccentTone, hexToRgba, themePalette } from "@/lib/theme";
+import { createAccentTone, themePalette } from "@/lib/theme";
 import type {
   DashboardRecentActivity,
-  DashboardStageDistribution,
   DashboardSummaryPayload,
 } from "@/types/dashboard";
 import { formatINR } from "@/utils/currency";
@@ -44,12 +42,82 @@ const formatCompactNumber = (value: number) =>
     notation: "compact",
     compactDisplay: "short",
     maximumFractionDigits: 1,
-  }).format(value);
+  }).format(Number.isFinite(value) ? value : 0);
+
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeDashboardPayload = (payload: unknown): DashboardSummaryPayload | null => {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+
+  const recentActivities = Array.isArray(record.recentActivities)
+    ? (record.recentActivities.filter(Boolean) as DashboardRecentActivity[])
+    : [];
+  const stageDistribution = Array.isArray(record.stageDistribution)
+    ? record.stageDistribution
+        .filter((stage) => stage && typeof stage === "object")
+        .map((stage) => {
+          const safeStage = stage as Record<string, unknown>;
+          return {
+            stage: String(safeStage.stage || "Unknown"),
+            count: toSafeNumber(safeStage.count, 0),
+            value: toSafeNumber(safeStage.value, 0),
+          };
+        })
+    : [];
+  const revenueTrend = Array.isArray(record.revenueTrend)
+    ? record.revenueTrend
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const safeTrend = item as Record<string, unknown>;
+          return {
+            month: String(safeTrend.month || ""),
+            actual: toSafeNumber(safeTrend.actual, 0),
+            forecast: toSafeNumber(safeTrend.forecast, 0),
+          };
+        })
+        .filter((item) => item.month)
+    : [];
+  const insights = Array.isArray(record.insights)
+    ? (record.insights.filter(Boolean) as DashboardSummaryPayload["insights"])
+    : [];
+  const kpiTrendsRecord =
+    record.kpiTrends && typeof record.kpiTrends === "object"
+      ? (record.kpiTrends as Record<string, unknown>)
+      : {};
+
+  return {
+    totalLeads: toSafeNumber(record.totalLeads, 0),
+    qualifiedLeads: toSafeNumber(record.qualifiedLeads, 0),
+    activeOpportunities: toSafeNumber(record.activeOpportunities, 0),
+    pipelineValue: toSafeNumber(record.pipelineValue, 0),
+    weightedRevenue: toSafeNumber(record.weightedRevenue, 0),
+    dealsClosingThisMonth: toSafeNumber(record.dealsClosingThisMonth, 0),
+    tasksDueToday: toSafeNumber(record.tasksDueToday, 0),
+    conversionRate: toSafeNumber(record.conversionRate, 0),
+    recentActivities,
+    stageDistribution,
+    revenueTrend,
+    insights,
+    kpiTrends: {
+      totalLeads: toSafeNumber(kpiTrendsRecord.totalLeads, 0),
+      pipelineValue: toSafeNumber(kpiTrendsRecord.pipelineValue, 0),
+      weightedRevenue: toSafeNumber(kpiTrendsRecord.weightedRevenue, 0),
+      dealsClosingThisMonth: toSafeNumber(kpiTrendsRecord.dealsClosingThisMonth, 0),
+      tasksDueToday: toSafeNumber(kpiTrendsRecord.tasksDueToday, 0),
+      conversionRate: toSafeNumber(kpiTrendsRecord.conversionRate, 0),
+    },
+  };
+};
 
 const formatValue = (value: number, formatType: "number" | "currency" | "percent") => {
-  if (formatType === "currency") return formatINR(value);
-  if (formatType === "percent") return `${value}%`;
-  return value.toLocaleString("en-IN");
+  const normalized = Number.isFinite(value) ? value : 0;
+  if (formatType === "currency") return formatINR(normalized);
+  if (formatType === "percent") return `${normalized}%`;
+  return normalized.toLocaleString("en-IN");
 };
 
 const resolveTrendTone = (label: string, value: number, delta: number) => {
@@ -74,14 +142,6 @@ const trendClassMap: Record<string, string> = {
   bad: "text-quantum-danger",
 };
 
-const stageColorMap: Record<string, string> = {
-  Cold: hexToRgba(themePalette.slate, 0.8),
-  Qualified: hexToRgba(themePalette.teal, 0.8),
-  Demo: hexToRgba(themePalette.info, 0.8),
-  Proposal: hexToRgba(themePalette.warning, 0.85),
-  Won: hexToRgba(themePalette.emerald, 0.85),
-};
-
 const DashboardKpiCard = ({
   label,
   value,
@@ -100,8 +160,10 @@ const DashboardKpiCard = ({
   onClick: () => void;
 }) => {
   const tone = createAccentTone(accent);
-  const isPositive = delta >= 0;
-  const trendTone = resolveTrendTone(label, value, delta);
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const safeDelta = Number.isFinite(delta) ? delta : 0;
+  const isPositive = safeDelta >= 0;
+  const trendTone = resolveTrendTone(label, safeValue, safeDelta);
 
   return (
     <motion.button
@@ -127,11 +189,11 @@ const DashboardKpiCard = ({
       </div>
       <div className="flex items-end justify-between gap-4">
         <p className="text-2xl font-semibold text-foreground">
-          {formatValue(value, formatType)}
+          {formatValue(safeValue, formatType)}
         </p>
         <div className={`flex items-center gap-1 text-sm font-medium ${trendClassMap[trendTone]}`}>
           {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-          <span>{isPositive ? "+" : ""}{delta}%</span>
+          <span>{isPositive ? "+" : ""}{safeDelta}%</span>
         </div>
       </div>
       <div className="mt-3 text-xs text-muted-foreground/80 group-hover:text-muted-foreground">
@@ -141,32 +203,29 @@ const DashboardKpiCard = ({
   );
 };
 
-const FunnelTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: DashboardStageDistribution }> }) => {
-  if (!active || !payload?.length) return null;
-  const data = payload[0].payload;
-
-  return (
-    <div className="rounded-xl border border-border/70 bg-card/95 px-3 py-2 text-xs shadow-[0_14px_32px_rgba(2,6,23,0.32)]">
-      <p className="text-sm font-semibold text-foreground">{data.stage}</p>
-      <p className="text-muted-foreground">{data.count} deals</p>
-      <p className="text-muted-foreground">Value: {formatINR(data.value)}</p>
-    </div>
-  );
-};
-
 const TrendTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; dataKey: string }>; label?: string }) => {
   if (!active || !payload?.length) return null;
+  const safePayload = payload.filter(Boolean);
 
   return (
     <div className="rounded-xl border border-border/70 bg-card/95 px-3 py-2 text-xs shadow-[0_14px_32px_rgba(2,6,23,0.32)]">
       <p className="text-sm font-semibold text-foreground">{label}</p>
-      {payload.map((item) => (
+      {safePayload.map((item) => (
         <p key={item.dataKey} className="text-muted-foreground">
           {item.dataKey === "actual" ? "Actual" : "Forecast"}: {formatINR(Number(item.value || 0))}
         </p>
       ))}
     </div>
   );
+};
+
+const formatActivityTimeLabel = (value?: string | null) => {
+  if (!value) return "just now";
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return "just now";
+  return isToday(timestamp)
+    ? format(timestamp, "hh:mm a")
+    : formatDistanceToNow(timestamp, { addSuffix: true });
 };
 
 const DashboardTimeline = ({
@@ -176,10 +235,11 @@ const DashboardTimeline = ({
   activities: DashboardRecentActivity[];
   onItemClick: (activity: DashboardRecentActivity) => void;
 }) => {
+  const safeActivities = Array.isArray(activities) ? activities.filter(Boolean) : [];
   const previewActivities =
-    activities.filter((activity) => activity.kind === "interaction").slice(0, 5) ||
+    safeActivities.filter((activity) => activity?.kind === "interaction").slice(0, 5) ||
     [];
-  const items = previewActivities.length > 0 ? previewActivities : activities.slice(0, 5);
+  const items = previewActivities.length > 0 ? previewActivities : safeActivities.slice(0, 5);
 
   return (
     <div className="glass-card p-6">
@@ -211,10 +271,7 @@ const DashboardTimeline = ({
                         : normalizedType === "note"
                           ? FileText
                           : Activity;
-            const timestamp = new Date(activity.date);
-            const timeLabel = isToday(timestamp)
-              ? format(timestamp, "hh:mm a")
-              : formatDistanceToNow(timestamp, { addSuffix: true });
+            const timeLabel = formatActivityTimeLabel(activity.date);
 
             return (
               <motion.button
@@ -262,6 +319,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardSummaryPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isNoData, setIsNoData] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -291,13 +350,43 @@ const Dashboard = () => {
       })
       .then((payload) => {
         if (cancelled) return;
+        if (Array.isArray(payload) && payload.length === 0) {
+          setData(null);
+          setError(null);
+          setIsNoData(true);
+          return;
+        }
+
+        const normalized = normalizeDashboardPayload(payload);
+        if (!normalized) {
+          setData(null);
+          setError(null);
+          setIsNoData(true);
+          return;
+        }
+
+        if (normalized.totalLeads === 0) {
+          setData(normalized);
+          setError(null);
+          setIsNoData(true);
+          return;
+        }
+
         setError(null);
-        setData(payload);
+        setIsNoData(false);
+        setData(normalized);
       })
       .catch((fetchError: unknown) => {
         if (cancelled) return;
-        console.error("Dashboard summary load failed:", fetchError);
+        if (import.meta.env.DEV) {
+          console.warn("Dashboard summary load failed:", fetchError);
+        }
+        setIsNoData(false);
         setError("Dashboard data unavailable.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsLoading(false);
       });
 
     return () => {
@@ -387,6 +476,8 @@ const Dashboard = () => {
     data.activeOpportunities === 0 &&
     data.pipelineValue === 0 &&
     data.tasksDueToday === 0;
+  const safeRevenueTrend = Array.isArray(data?.revenueTrend) ? data.revenueTrend : [];
+  const hasRevenueData = safeRevenueTrend.length > 0;
 
   const handleStageClick = (stage: string) => {
     if (stage === "Proposal" || stage === "Won") {
@@ -416,12 +507,26 @@ const Dashboard = () => {
     navigate("/tasks");
   };
 
-  if (!data && !error) {
+  if (isLoading) {
     return (
       <div className="space-y-6 max-w-[1500px]">
         <div className="page-header">
           <h1 className="page-title">Quantum Command Center</h1>
           <p className="page-subtitle">Loading live dashboard intelligence...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isNoData) {
+    return (
+      <div className="space-y-6 max-w-[1500px]">
+        <div className="page-header">
+          <h1 className="page-title">Quantum Command Center</h1>
+          <p className="page-subtitle">No data available</p>
+        </div>
+        <div className="glass-card p-6 text-sm text-muted-foreground">
+          No data available
         </div>
       </div>
     );
@@ -469,84 +574,62 @@ const Dashboard = () => {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <div className="glass-card p-6">
-              <div className="section-header">
-                <h3 className="section-title">Sales Funnel</h3>
-                <p className="section-subtitle">Cold to won pipeline progression across leads and opportunities.</p>
-              </div>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data.stageDistribution ?? []} layout="vertical" margin={{ left: 12, right: 12 }}>
-                  <XAxis type="number" tickLine={false} axisLine={false} />
-                  <YAxis dataKey="stage" type="category" tickLine={false} axisLine={false} width={80} />
-                  <Tooltip content={<FunnelTooltip />} />
-                  <Bar
-                    dataKey="count"
-                    radius={[0, 8, 8, 0]}
-                    activeBar={{ fill: hexToRgba(themePalette.primary, 0.95) }}
-                    onClick={(data) => data?.payload && handleStageClick(data.payload.stage)}
-                  >
-                    {(data.stageDistribution ?? []).map((entry) => (
-                      <Cell
-                        key={entry.stage}
-                        fill={stageColorMap[entry.stage] ?? hexToRgba(themePalette.primary, 0.8)}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                {(data.stageDistribution ?? []).map((stage) => (
-                  <span key={stage.stage} className="rounded-full border border-border/70 px-3 py-1">
-                    {stage.stage}: {stage.count}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <SalesFunnel data={data.stageDistribution ?? []} onStageClick={handleStageClick} />
 
             <div className="glass-card p-6">
               <div className="section-header">
                 <h3 className="section-title">Revenue Trend</h3>
                 <p className="section-subtitle">Actual versus forecasted revenue for the last 6 months.</p>
               </div>
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={data.revenueTrend ?? []} margin={{ left: 6, right: 18 }}>
-                  <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => formatCompactNumber(Number(value))}
-                  />
-                  <Tooltip content={<TrendTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="actual"
-                    stroke={themePalette.info}
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 5 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="forecast"
-                    stroke={themePalette.primary}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={false}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-              <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full" style={{ background: themePalette.info }} />
-                  Actual
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full" style={{ background: themePalette.primary }} />
-                  Forecast
-                </span>
-              </div>
+              {hasRevenueData ? (
+                <>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={safeRevenueTrend} margin={{ left: 6, right: 18 }}>
+                      <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) => formatCompactNumber(Number(value))}
+                      />
+                      <Tooltip content={<TrendTooltip />} />
+                      <Line
+                        type="monotone"
+                        dataKey="actual"
+                        stroke={themePalette.info}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                        dot={false}
+                        activeDot={{ r: 5 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="forecast"
+                        stroke={themePalette.primary}
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        isAnimationActive={false}
+                        dot={false}
+                        activeDot={{ r: 5 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ background: themePalette.info }} />
+                      Actual
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ background: themePalette.primary }} />
+                      Forecast
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border/70 bg-secondary/30 px-4 py-8 text-center text-sm text-muted-foreground">
+                  Revenue trend data is not available yet.
+                </div>
+              )}
             </div>
           </div>
 
@@ -555,7 +638,10 @@ const Dashboard = () => {
               activities={data.recentActivities ?? []}
               onItemClick={handleTimelineClick}
             />
-            <AIInsights />
+            <div className="space-y-6">
+              <AIInsights />
+              <AgentAlertsPanel />
+            </div>
           </div>
         </>
       )}
@@ -564,3 +650,5 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+

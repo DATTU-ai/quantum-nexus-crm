@@ -26,13 +26,20 @@ const AIInsightPanel = ({ lead }: AIInsightPanelProps) => {
     );
   }
 
-  const { aiInsight } = lead;
-  const ruleInsights = insights?.insights ?? [];
-  const liveProbability = insights?.probability ?? aiInsight.dealWinProbability;
+  const aiInsight = lead.aiInsight ?? {
+    dealWinProbability: 0,
+    recommendedNextAction: "No recommendation",
+    riskIndicator: "Medium" as const,
+    customerEngagementScore: 0,
+  };
+  const ruleInsights = Array.isArray(insights?.insights) ? insights.insights : [];
+  const rawProbability = insights?.probability ?? aiInsight.dealWinProbability ?? 0;
+  const liveProbability = Number.isFinite(rawProbability) ? Math.max(0, Math.min(100, rawProbability)) : 0;
   const liveRecommendation =
-    insights?.recommendation || ruleInsights[0]?.action || aiInsight.recommendedNextAction;
-  const liveRisk = insights?.risk ?? aiInsight.riskIndicator;
-  const liveEngagement = insights?.engagementScore ?? aiInsight.customerEngagementScore;
+    insights?.recommendation || ruleInsights[0]?.action || aiInsight.recommendedNextAction || "No recommendation";
+  const liveRisk = insights?.risk ?? aiInsight.riskIndicator ?? "Medium";
+  const rawEngagement = insights?.engagementScore ?? aiInsight.customerEngagementScore ?? 0;
+  const liveEngagement = Number.isFinite(rawEngagement) ? Math.max(0, Math.min(100, rawEngagement)) : 0;
   const riskTone = getRiskTone(liveRisk);
   const urgencyTone = {
     high: "border-rose-400/30 bg-rose-500/10 text-rose-200",
@@ -59,7 +66,7 @@ const AIInsightPanel = ({ lead }: AIInsightPanelProps) => {
         }}
       >
         <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Analyzed Record</p>
-        <p className="mt-1 text-sm font-medium text-foreground">{lead.companyInfo.companyName}</p>
+        <p className="mt-1 text-sm font-medium text-foreground">{lead.companyInfo?.companyName || "No data available"}</p>
       </div>
 
       <div className="space-y-4">
@@ -102,13 +109,13 @@ const AIInsightPanel = ({ lead }: AIInsightPanelProps) => {
               {ruleInsights.map((insight) => (
                 <div key={insight.id} className="rounded-lg border border-border/70 bg-background/40 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-foreground">{insight.title}</p>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${urgencyTone[insight.urgency]}`}>
-                      {insight.urgency}
+                    <p className="text-sm font-semibold text-foreground">{insight.title || "No data available"}</p>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${urgencyTone[insight.urgency] ?? urgencyTone.medium}`}>
+                      {insight.urgency || "medium"}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">{insight.description}</p>
-                  <p className="mt-2 text-xs text-foreground">Action: {insight.action}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{insight.description || "No data available"}</p>
+                  <p className="mt-2 text-xs text-foreground">Action: {insight.action || "No recommendation"}</p>
                 </div>
               ))}
             </div>

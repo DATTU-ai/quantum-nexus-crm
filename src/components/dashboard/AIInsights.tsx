@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, BrainCircuit, LoaderCircle, Sparkles, Target
 import { useNavigate } from "react-router-dom";
 import { apiRequest } from "@/lib/apiClient";
 import type { InsightCardRecord, InsightsPayload } from "@/types/interactions";
+import { formatINR } from "@/utils/currency";
 
 const toneClassMap: Record<string, string> = {
   neutral: "border-border/70 bg-secondary/25 text-foreground",
@@ -24,6 +25,8 @@ const AIInsights = () => {
   const [cards, setCards] = useState<InsightCardRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forecast, setForecast] = useState(0);
+  const safeCards = Array.isArray(cards) ? cards : [];
 
   useEffect(() => {
     let active = true;
@@ -37,7 +40,7 @@ const AIInsights = () => {
         setError(null);
       } catch (loadError) {
         if (!active) return;
-        console.error("AI insights load failed:", loadError);
+        console.warn("AI insights load failed:", loadError);
         setCards([]);
         setError("AI insights are unavailable right now.");
       } finally {
@@ -48,6 +51,35 @@ const AIInsights = () => {
     };
 
     void loadInsights();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/ai/forecast")
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error("AI forecast unavailable");
+        }
+        return payload;
+      })
+      .then((payload) => {
+        if (!active) return;
+        const nextForecast = Number(payload?.forecast);
+        setForecast(Number.isFinite(nextForecast) ? nextForecast : 0);
+      })
+      .catch((loadError) => {
+        if (!active) return;
+        if (import.meta.env.DEV) {
+          console.warn("AI forecast load failed:", loadError);
+        }
+        setForecast(0);
+      });
 
     return () => {
       active = false;
@@ -68,6 +100,13 @@ const AIInsights = () => {
         </p>
       </div>
 
+      <div className="mb-4 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3">
+        <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+          Predictive Revenue Forecast
+        </p>
+        <p className="mt-1 text-lg font-semibold text-foreground">{formatINR(forecast)}</p>
+      </div>
+
       {isLoading ? (
         <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
           <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -77,20 +116,30 @@ const AIInsights = () => {
         <div className="rounded-xl border border-dashed border-border/70 bg-secondary/20 px-4 py-6 text-sm text-muted-foreground">
           {error}
         </div>
+      ) : safeCards.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border/70 bg-secondary/20 px-4 py-6 text-sm text-muted-foreground">
+          No data available
+        </div>
       ) : (
         <div className="grid gap-3">
-          {cards.map((card, index) => {
-            const Icon = iconMap[card.id] || BrainCircuit;
-            const toneClassName = toneClassMap[card.tone] || toneClassMap.neutral;
+          {safeCards.map((card, index) => {
+            if (!card) return null;
+            const safeCard = card || ({} as InsightCardRecord);
+            const Icon = iconMap[safeCard.id] || BrainCircuit;
+            const toneClassName = toneClassMap[safeCard.tone] || toneClassMap.neutral;
 
             return (
               <motion.button
-                key={card.id}
+                key={safeCard.id || `${index}`}
                 type="button"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                onClick={() => navigate(card.href)}
+                onClick={() => {
+                  if (safeCard?.href) {
+                    navigate(safeCard.href);
+                  }
+                }}
                 className="group rounded-xl border border-border/70 bg-secondary/20 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-secondary/35"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -100,11 +149,11 @@ const AIInsights = () => {
                         <Icon className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{card.title}</p>
-                        <p className="text-xs text-muted-foreground">{card.count} active signals</p>
+                        <p className="text-sm font-semibold text-foreground">{safeCard?.title || "No data available"}</p>
+                        <p className="text-xs text-muted-foreground">{Number.isFinite(safeCard?.count) ? safeCard.count : 0} active signals</p>
                       </div>
                     </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground">{card.message}</p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{safeCard?.message || "No data available"}</p>
                   </div>
                   <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
                 </div>
@@ -118,3 +167,4 @@ const AIInsights = () => {
 };
 
 export default AIInsights;
+

@@ -61,6 +61,7 @@ model Lead {
   need              String?
   timeline          String?
   lastActivityDate  DateTime?     @map("last_activity_date")
+  lastEmailSentAt   DateTime?     @map("last_email_sent_at")
   nextFollowUpDate  DateTime?     @map("next_follow_up_date")
   notes             String?
   companyId         String?       @map("company_id")

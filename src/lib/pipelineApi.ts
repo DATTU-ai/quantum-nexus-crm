@@ -1,4 +1,6 @@
 export const pipeline_api_endpoints = {
+  publicLeads: "/public/leads",
+  publicLead: (id: string) => `/public/leads/${id}`,
   leads: "/leads",
   lead: (id: string) => `/leads/${id}`,
   importLeads: "/leads/import",
@@ -7,3 +9,4 @@ export const pipeline_api_endpoints = {
   opportunities: "/opportunities",
   opportunity: (id: string) => `/opportunities/${id}`,
 } as const;
+

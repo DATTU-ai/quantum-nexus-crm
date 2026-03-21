@@ -54,7 +54,7 @@ const ReportsPage = () => {
         setRevenueReport(revenue);
         setLeadReport(leads);
       } catch (error) {
-        console.error("Reports load failed:", error);
+        console.warn("Reports load failed:", error);
       }
     };
 
@@ -138,3 +138,4 @@ const ReportsPage = () => {
 };
 
 export default ReportsPage;
+

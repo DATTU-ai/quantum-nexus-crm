@@ -1,4 +1,4 @@
-﻿import { addDays, format } from "date-fns";
+import { addDays, format } from "date-fns";
 import type {
   CompanyAIInsightRecord,
   CompanyActivityRecord,
@@ -626,3 +626,4 @@ export const company_detail_seed = (company_id: string): CompanyDetailRecord | n
     ai_insight: company_ai_insights_seed.find((record) => record.company_id === company_id) ?? null,
   };
 };
+

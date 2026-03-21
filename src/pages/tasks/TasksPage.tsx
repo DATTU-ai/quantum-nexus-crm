@@ -17,6 +17,16 @@ type ListResponse<T> = { data: T };
 const statusOptions = ["pending", "in-progress", "completed"] as const;
 const priorityOptions = ["low", "medium", "high"] as const;
 
+const parseDueDate = (value: string) => {
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatDueDateLabel = (value: string) => {
+  const parsed = parseDueDate(value);
+  return parsed ? format(parsed, "dd MMM yyyy, hh:mm a") : "Date unavailable";
+};
+
 const TasksPage = () => {
   const { teamMembers } = useTeamMembers({ includeInactive: true });
   const [searchParams] = useSearchParams();
@@ -39,7 +49,9 @@ const TasksPage = () => {
         const response = await apiRequest<ListResponse<TaskRecord[]>>("/tasks");
         setTasks(response.data ?? []);
       } catch (error) {
-        console.error("Tasks load failed:", error);
+        if (import.meta.env.DEV) {
+          console.warn("Tasks load failed:", error);
+        }
       }
     };
 
@@ -55,7 +67,8 @@ const TasksPage = () => {
     const upcomingCutoff = addDays(now, 7);
 
     return tasks.filter((task) => {
-      const due = parseISO(task.dueDate);
+      const due = parseDueDate(task.dueDate);
+      if (!due) return false;
       if (task.status === "completed") return false;
       if (dueFilter === "today") return due >= start && due <= end;
       if (dueFilter === "overdue") return isBefore(due, now);
@@ -68,7 +81,8 @@ const TasksPage = () => {
     const now = new Date();
     return visibleTasks.reduce(
       (accumulator, task) => {
-        const due = parseISO(task.dueDate);
+        const due = parseDueDate(task.dueDate);
+        if (!due) return accumulator;
         if (task.status === "completed") return accumulator;
         if (isBefore(due, now)) accumulator.overdue += 1;
         else if (due.getTime() - now.getTime() <= 2 * 24 * 60 * 60 * 1000) accumulator.dueSoon += 1;
@@ -117,7 +131,9 @@ const TasksPage = () => {
       setIsModalOpen(false);
       resetForm();
     } catch (error) {
-      console.error("Create task failed:", error);
+      if (import.meta.env.DEV) {
+        console.warn("Create task failed:", error);
+      }
     }
   };
 
@@ -129,7 +145,9 @@ const TasksPage = () => {
       });
       setTasks((current) => current.map((item) => (item.id === task.id ? response.data : item)));
     } catch (error) {
-      console.error("Task update failed:", error);
+      if (import.meta.env.DEV) {
+        console.warn("Task update failed:", error);
+      }
     }
   };
 
@@ -141,12 +159,17 @@ const TasksPage = () => {
       });
       setTasks((current) => current.map((item) => (item.id === task.id ? response.data : item)));
     } catch (error) {
-      console.error("Task update failed:", error);
+      if (import.meta.env.DEV) {
+        console.warn("Task update failed:", error);
+      }
     }
   };
 
   const renderDueBadge = (task: TaskRecord) => {
-    const due = parseISO(task.dueDate);
+    const due = parseDueDate(task.dueDate);
+    if (!due) {
+      return <span className="rounded-full border border-border/70 bg-secondary/20 px-2 py-0.5 text-[10px] uppercase text-muted-foreground">Unknown date</span>;
+    }
     const now = new Date();
     if (task.status === "completed") {
       return <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase text-emerald-200">Done</span>;
@@ -274,45 +297,53 @@ const TasksPage = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visibleTasks.map((task) => (
-              <TableRow key={task.id}>
-                <TableCell className="font-medium text-foreground">{task.title}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {task.entityType} Â· {task.entityId}
-                </TableCell>
-                <TableCell>{task.assignedTo}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span>{format(parseISO(task.dueDate), "dd MMM yyyy, hh:mm a")}</span>
-                    {renderDueBadge(task)}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Select value={task.status} onValueChange={(value) => updateTaskStatus(task, value)}>
-                    <SelectTrigger className="h-8 w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>{status}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Select value={task.priority} onValueChange={(value) => updateTaskPriority(task, value)}>
-                    <SelectTrigger className="h-8 w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {priorityOptions.map((priority) => (
-                        <SelectItem key={priority} value={priority}>{priority}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {visibleTasks.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                  No tasks found for the selected filter.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              visibleTasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell className="font-medium text-foreground">{task.title}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {task.entityType} · {task.entityId}
+                  </TableCell>
+                  <TableCell>{task.assignedTo}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{formatDueDateLabel(task.dueDate)}</span>
+                      {renderDueBadge(task)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Select value={task.status} onValueChange={(value) => updateTaskStatus(task, value)}>
+                      <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>{status}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select value={task.priority} onValueChange={(value) => updateTaskPriority(task, value)}>
+                      <SelectTrigger className="h-8 w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priorityOptions.map((priority) => (
+                          <SelectItem key={priority} value={priority}>{priority}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
@@ -321,3 +352,5 @@ const TasksPage = () => {
 };
 
 export default TasksPage;
+
+

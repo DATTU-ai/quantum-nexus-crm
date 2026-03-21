@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import { CRM_INTERACTION_SAVED_EVENT } from "@/lib/crmEvents";
 import {
   interactionTypes,
@@ -51,9 +51,24 @@ interface InteractionTimelineProps {
   entityId: string;
 }
 
-const formatDateTime = (value: string) => format(parseISO(value), "dd MMM yyyy, hh:mm a");
+const parseInteractionDate = (value?: string | null) => {
+  if (!value) return null;
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatDateTime = (value?: string | null) => {
+  const parsed = parseInteractionDate(value);
+  return parsed ? format(parsed, "dd MMM yyyy, hh:mm a") : "Date unavailable";
+};
+
+const formatRelativeTime = (value?: string | null) => {
+  const parsed = parseInteractionDate(value);
+  return parsed ? formatDistanceToNow(parsed, { addSuffix: true }) : "just now";
+};
 
 const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps) => {
+  const hasAuthToken = hasStoredAuthToken();
   const [interactions, setInteractions] = useState<InteractionRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,6 +88,14 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
   useEffect(() => {
     let active = true;
 
+    if (!hasAuthToken) {
+      setInteractions([]);
+      setIsLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     const loadInteractions = async () => {
       setIsLoading(true);
       try {
@@ -83,7 +106,9 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
         setInteractions(response.data ?? []);
       } catch (error) {
         if (!active) return;
-        console.error("Interaction timeline load failed:", error);
+        if (import.meta.env.DEV) {
+          console.warn("Interaction timeline load failed:", error);
+        }
         setInteractions([]);
       } finally {
         if (active) {
@@ -97,7 +122,7 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
     return () => {
       active = false;
     };
-  }, [entityId, entityType, refreshKey]);
+  }, [entityId, entityType, hasAuthToken, refreshKey]);
 
   const overdueCount = useMemo(
     () =>
@@ -115,7 +140,11 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
     };
 
     interactions.forEach((interaction) => {
-      const createdAt = parseISO(interaction.createdAt);
+      const createdAt = parseInteractionDate(interaction.createdAt);
+      if (!createdAt) {
+        buckets.Earlier.push(interaction);
+        return;
+      }
       if (isToday(createdAt)) {
         buckets.Today.push(interaction);
         return;
@@ -133,6 +162,10 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!hasAuthToken) {
+      return;
+    }
+
     const summary = form.summary.trim();
     const details = form.details.trim();
 
@@ -143,6 +176,7 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
 
     setIsSubmitting(true);
     try {
+      const nextFollowUpDate = form.nextFollowUp ? new Date(form.nextFollowUp) : null;
       await apiRequest<{ data: InteractionRecord }>("/interactions", {
         method: "POST",
         body: {
@@ -151,7 +185,10 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
           type: form.type,
           summary,
           details: details || null,
-          nextFollowUp: form.nextFollowUp ? new Date(form.nextFollowUp).toISOString() : null,
+          nextFollowUp:
+            nextFollowUpDate && !Number.isNaN(nextFollowUpDate.getTime())
+              ? nextFollowUpDate.toISOString()
+              : null,
         },
       });
       setForm({
@@ -168,7 +205,9 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
       );
       toast.success("Interaction saved.");
     } catch (error) {
-      console.error("Interaction save failed:", error);
+      if (import.meta.env.DEV) {
+        console.warn("Interaction save failed:", error);
+      }
       toast.error(error instanceof Error ? error.message : "Unable to save interaction.");
     } finally {
       setIsSubmitting(false);
@@ -250,7 +289,7 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || !hasAuthToken}>
               {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
               Save Interaction
             </Button>
@@ -315,7 +354,7 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
                           </div>
 
                           <div className="text-xs text-muted-foreground sm:text-right">
-                            <p>{formatDistanceToNow(parseISO(interaction.createdAt), { addSuffix: true })}</p>
+                            <p>{formatRelativeTime(interaction.createdAt)}</p>
                             <p>{formatDateTime(interaction.createdAt)}</p>
                           </div>
                         </div>
@@ -345,3 +384,4 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
 };
 
 export default InteractionTimeline;
+

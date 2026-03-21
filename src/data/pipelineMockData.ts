@@ -1,4 +1,4 @@
-﻿import { addDays, format } from "date-fns";
+import { addDays, format } from "date-fns";
 import {
   buildLeadInsightForStage,
   leadStageActivityTypeMap,
@@ -890,3 +890,4 @@ export const leadConversionStages = new Set<LeadPipelineStage>([
 ]);
 
 export const opportunityClosedStages = new Set<OpportunityPipelineStage>(["Deal Won", "Deal Lost"]);
+

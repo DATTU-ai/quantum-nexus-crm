@@ -21,11 +21,18 @@ const priorityClassMap: Record<PipelineDeal["priority"], string> = {
   Low: "text-quantum-success",
 };
 
+const formatDisplayDate = (value?: string | null) => {
+  if (!value) return "Not set";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Not set";
+  return format(parsed, "dd MMM yyyy");
+};
+
 const LeadPipelineCard = memo(
   ({ lead, selected, dragging, onSelect, onDragStart, onDragEnd }: LeadPipelineCardProps) => {
     const stageTone = getStageTone(lead.stage);
-    const lastActivity = format(new Date(lead.lastActivityDate), "dd MMM yyyy");
-    const nextFollowUp = format(new Date(lead.nextFollowUpDate), "dd MMM yyyy");
+    const lastActivity = formatDisplayDate(lead.lastActivityDate);
+    const nextFollowUp = formatDisplayDate(lead.nextFollowUpDate);
     const probability = Math.max(0, Math.min(100, Math.round(lead.opportunityDetails.probability)));
 
     return (
@@ -119,3 +126,4 @@ const LeadPipelineCard = memo(
 LeadPipelineCard.displayName = "LeadPipelineCard";
 
 export default LeadPipelineCard;
+

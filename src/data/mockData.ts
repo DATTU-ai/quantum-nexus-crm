@@ -1,6 +1,6 @@
-﻿export const kpiData = [
-  { label: "Total Pipeline Value", value: 4250000, prefix: "â‚¹", delta: 12.5, format: "currency" },
-  { label: "Weighted Revenue Forecast", value: 2180000, prefix: "â‚¹", delta: 8.3, format: "currency" },
+export const kpiData = [
+  { label: "Total Pipeline Value", value: 4250000, prefix: "₹", delta: 12.5, format: "currency" },
+  { label: "Weighted Revenue Forecast", value: 2180000, prefix: "₹", delta: 8.3, format: "currency" },
   { label: "Deals Closing This Month", value: 14, prefix: "", delta: -5.2, format: "number" },
   { label: "Active Trials", value: 8, prefix: "", delta: 33.3, format: "number" },
   { label: "Follow-ups Due Today", value: 23, prefix: "", delta: 15.0, format: "number" },
@@ -77,3 +77,4 @@ export const workOrders = [
   { id: "WO-002", company: "CloudNine Systems", dealValue: 390000, implStatus: "In Progress", paymentStatus: "Partial", renewalDate: "2027-01-15", amcStatus: "Pending" },
   { id: "WO-003", company: "TechCorp Industries", dealValue: 450000, implStatus: "Planning", paymentStatus: "Invoiced", renewalDate: "2027-03-20", amcStatus: "N/A" },
 ];
+

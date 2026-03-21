@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import type { TeamMember } from "@/types/team";
 
 type TeamListResponse = {
@@ -8,11 +8,19 @@ type TeamListResponse = {
 
 export const useTeamMembers = (options?: { includeInactive?: boolean }) => {
   const includeInactive = options?.includeInactive ?? false;
+  const hasAuthToken = hasStoredAuthToken();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadTeamMembers = useCallback(async () => {
+    if (!hasAuthToken) {
+      setTeamMembers([]);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -25,7 +33,7 @@ export const useTeamMembers = (options?: { includeInactive?: boolean }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [includeInactive]);
+  }, [hasAuthToken, includeInactive]);
 
   useEffect(() => {
     void loadTeamMembers();
@@ -48,3 +56,4 @@ export const useTeamMembers = (options?: { includeInactive?: boolean }) => {
     refresh: loadTeamMembers,
   };
 };
+

@@ -38,7 +38,7 @@ const AiIntelligence = () => {
           productPerformance: response.productPerformance ?? [],
         });
       } catch (error) {
-        console.error("AI analytics load failed:", error);
+        console.warn("AI analytics load failed:", error);
       }
     };
 
@@ -136,3 +136,4 @@ const AiIntelligence = () => {
 };
 
 export default AiIntelligence;
+

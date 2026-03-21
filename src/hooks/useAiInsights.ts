@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import { CRM_INTERACTION_SAVED_EVENT } from "@/lib/crmEvents";
 import type { RuleBasedInsightsPayload } from "@/types/ai";
 
@@ -8,6 +8,7 @@ type AiInsightsResponse = {
 };
 
 export const useAiInsights = (entityId: string | null) => {
+  const hasAuthToken = hasStoredAuthToken();
   const [insights, setInsights] = useState<RuleBasedInsightsPayload | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +32,10 @@ export const useAiInsights = (entityId: string | null) => {
   useEffect(() => {
     let isActive = true;
 
-    if (!entityId) {
+    if (!entityId || !hasAuthToken) {
       setInsights(null);
       setError(null);
+      setIsLoading(false);
       return undefined;
     }
 
@@ -62,7 +64,8 @@ export const useAiInsights = (entityId: string | null) => {
     return () => {
       isActive = false;
     };
-  }, [entityId, refreshToken]);
+  }, [entityId, hasAuthToken, refreshToken]);
 
   return { insights, isLoading, error };
 };
+

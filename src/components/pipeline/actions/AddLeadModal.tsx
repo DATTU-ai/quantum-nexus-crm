@@ -134,7 +134,7 @@ const AddLeadModal = ({ open, onOpenChange, onSubmit }: AddLeadModalProps) => {
       toast.success(`Lead successfully created for ${companyName}.`);
       onOpenChange(false);
     } catch (error) {
-      console.error("Create lead failed:", error);
+      console.warn("Create lead failed:", error);
       toast.error(error instanceof Error ? error.message : "Unable to create lead. Check API connectivity.");
     } finally {
       setIsSubmitting(false);
@@ -331,3 +331,4 @@ const AddLeadModal = ({ open, onOpenChange, onSubmit }: AddLeadModalProps) => {
 };
 
 export default AddLeadModal;
+

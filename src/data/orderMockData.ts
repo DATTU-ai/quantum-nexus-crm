@@ -1,4 +1,4 @@
-﻿import { addDays, format } from "date-fns";
+import { addDays, format } from "date-fns";
 import type {
   OrderActivityRecord,
   OrderDocumentRecord,
@@ -278,3 +278,4 @@ export const order_activity_seed: OrderActivityRecord[] = [
     created_at: formatDate(-2),
   },
 ];
+

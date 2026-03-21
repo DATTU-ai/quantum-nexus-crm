@@ -13,6 +13,18 @@ export default defineConfig(({ mode }) => ({
         target: "http://127.0.0.1:3001",
         changeOrigin: true,
       },
+      "/public": {
+        target: "http://127.0.0.1:3001",
+        changeOrigin: true,
+      },
+      "/ai": {
+        target: "http://127.0.0.1:3001",
+        changeOrigin: true,
+      },
+      "/alerts": {
+        target: "http://127.0.0.1:3001",
+        changeOrigin: true,
+      },
       "/uploads": {
         target: "http://127.0.0.1:3001",
         changeOrigin: true,

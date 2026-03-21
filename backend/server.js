@@ -1,4 +1,6 @@
+import { sendEmail } from "./services/email.service.js";
 import cors from "cors";
+import { Prisma } from "@prisma/client";
 import {
   addDays,
   endOfDay,
@@ -15,9 +17,11 @@ import fs from "fs";
 import helmet from "helmet";
 import morgan from "morgan";
 import multer from "multer";
+import cron from "node-cron";
 import path from "path";
 import { fileURLToPath } from "url";
 import prisma from "./lib/prisma.js";
+import aiRoutes from "./routes/ai.routes.js";
 import { authorizeRole, hashPassword, requireAuth, signToken, verifyPassword } from "./lib/auth.js";
 import {
   buildCompanyInsight,
@@ -51,10 +55,15 @@ import {
 } from "./lib/report-builders.js";
 import {
   buildRuleBasedInsights,
-  generateInsights,
   isFollowUpInteractionOverdue,
 } from "./lib/ai-insights.js";
 import { serializeLead, serializeOpportunity } from "./lib/pipeline-serializers.js";
+import { buildLeadActionUrl, getLeadOwnerLabel } from "./services/agent.service.js";
+import { sendAutomationEmail } from "./services/admin-email.service.js";
+import { getAIInsights } from "./services/ai-next-action.service.js";
+import { sendAutomatedLeadFollowup } from "./services/automation.service.js";
+import { logPrediction } from "./services/ai-prediction-log.service.js";
+import { getAgentAlerts } from "./services/alerts.service.js";
 import { buildInsightCards, getInsightsPayload } from "./services/insights.service.js";
 import {
   daysDiffFromNow,
@@ -77,13 +86,42 @@ if (!process.env.JWT_SECRET) {
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const app = express();
-const port = Number(process.env.PORT || 3001);
+const PORT = Number(process.env.PORT || 3001);
+let requestCounter = 0;
+
+const safeNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+app.get("/test-email", async (req, res) => {
+  try {
+    await sendEmail({
+      to: process.env.TEST_EMAIL_TO || "YOUR_EMAIL@gmail.com",
+      subject: "Test Email from DATTU CRM",
+      html: "<h2>✅ Email working successfully!</h2><p>Your AI CRM email system is active.</p>",
+    });
+
+    res.status(200).send("✅ Email sent successfully");
+  } catch (error) {
+    console.error("[EMAIL ERROR]", error);
+    res.status(500).send("❌ Email failed");
+  }
+});
 
 app.use(cors());
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 app.use("/uploads", express.static(uploadDir));
+app.use((req, _res, next) => {
+  req.requestId = `${Date.now().toString(36)}-${(requestCounter += 1).toString(36)}`;
+  if (req.body == null || typeof req.body !== "object") {
+    req.body = {};
+  }
+  next();
+});
+app.use("/ai", aiRoutes);
 
 const shouldDebugApi = process.env.DEBUG_API === "true" || process.env.NODE_ENV !== "production";
 const maskAuthHeader = (value) => {
@@ -94,14 +132,15 @@ const maskAuthHeader = (value) => {
 
 if (shouldDebugApi) {
   app.use("/api", (req, res, next) => {
-    console.debug(`[API] ${req.method} ${req.originalUrl} headers`, {
+    const requestId = req.requestId || "unknown";
+    console.debug(`[API] [${requestId}] ${req.method} ${req.originalUrl} headers`, {
       authorization: maskAuthHeader(req.headers.authorization),
       "content-type": req.headers["content-type"],
       "user-agent": req.headers["user-agent"],
     });
 
     res.on("finish", () => {
-      console.debug(`[API] ${req.method} ${req.originalUrl} response`, {
+      console.debug(`[API] [${requestId}] ${req.method} ${req.originalUrl} response`, {
         statusCode: res.statusCode,
       });
     });
@@ -266,8 +305,16 @@ const paginate = (req) => {
   };
 };
 
-const asDate = (value) => (value ? new Date(value) : null);
-const asNumber = (value, fallback = 0) => (value == null || value === "" ? fallback : Number(value));
+const asDate = (value) => {
+  if (value == null || value === "") return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+const asNumber = (value, fallback = 0) => {
+  if (value == null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 const uploadUrl = (file) => (file ? `/uploads/${file.filename}` : "");
 const resolveLeadOwnerName = (lead) => lead?.leadOwner?.name || "Unassigned";
 const serializeSetting = (setting) => ({
@@ -518,13 +565,53 @@ const loadEntityAiInsights = async ({ entityType, entity, stage }) => {
         })
       : [];
 
-  return buildRuleBasedInsights({
+  const ruleInsights = buildRuleBasedInsights({
     entityType,
     entity,
     stage,
     interactions,
     followUpTasks,
   });
+
+  const aiSource =
+    entityType === "opportunity"
+      ? {
+          lastActivityDate: entity.updatedAt || entity.createdAt,
+          dealValue: entity.dealValue,
+          probability: entity.probability,
+          status: entity.stage,
+        }
+      : entity;
+  const aiInsight = getAIInsights(aiSource);
+
+  const signalInsights = Array.isArray(aiInsight.signals)
+    ? aiInsight.signals.map((signal, index) => ({
+        id: `ai-signal-${index + 1}`,
+        ruleId: `ai-signal-${index + 1}`,
+        title: signal.type || "AI Signal",
+        description: signal.message || aiInsight.reason || "AI model generated a signal.",
+        action: aiInsight.action || ruleInsights.recommendation,
+        urgency:
+          String(signal.severity || "").toUpperCase() === "HIGH"
+            ? "high"
+            : String(signal.severity || "").toUpperCase() === "MEDIUM"
+              ? "medium"
+              : "low",
+      }))
+    : [];
+
+  return {
+    ...ruleInsights,
+    probability: safeNumber(aiInsight.score, ruleInsights.probability),
+    risk: aiInsight.riskLevel || ruleInsights.risk,
+    recommendation: aiInsight.action || ruleInsights.recommendation,
+    summary: `${aiInsight.riskLevel || ruleInsights.risk} risk - ${safeNumber(aiInsight.score, ruleInsights.probability)}% AI score`,
+    generatedAt: aiInsight.generatedAt || ruleInsights.generatedAt,
+    model: aiInsight.model || null,
+    confidence: aiInsight.confidence ?? null,
+    reason: aiInsight.reason || null,
+    insights: [...signalInsights, ...(ruleInsights.insights || [])].slice(0, 6),
+  };
 };
 
 const getActivitiesForEntities = async (entityType, entityIds) => {
@@ -899,6 +986,239 @@ const runDealInactivityAutomation = async () => {
     }
     throw error;
   }
+};
+
+const activeLeadStatuses = new Set(["Closed Won", "Closed Lost", "Deal Won", "Deal Lost"]);
+const completedTaskStatuses = new Set(["completed", "done", "cancelled"]);
+
+const isLeadClosed = (status) => activeLeadStatuses.has(String(status || "").trim());
+
+const resolveLeadReminderRecipient = (lead) => {
+  const ownerEmail = String(lead?.leadOwner?.email || "").trim();
+  if (ownerEmail) return ownerEmail;
+
+  const leadEmail = String(lead?.email || "").trim();
+  if (leadEmail) return leadEmail;
+
+  return null;
+};
+
+const wasLeadReminderSentToday = async (leadId, dayStart) => {
+  if (!prisma.emailLog?.findFirst) return false;
+  try {
+    const existing = await prisma.emailLog.findFirst({
+      where: {
+        entityType: "lead",
+        entityId: leadId,
+        subject: { contains: "Follow-up due" },
+        sentAt: { gte: dayStart },
+      },
+      orderBy: { sentAt: "desc" },
+    });
+    return Boolean(existing);
+  } catch (error) {
+    if (isMissingTableError(error)) return false;
+    throw error;
+  }
+};
+
+const runDailyLeadAutomation = async () => {
+  const defaultSummary = {
+    scannedLeads: 0,
+    remindersSent: 0,
+    automatedLeadEmailsSent: 0,
+    highRiskTasksCreated: 0,
+    skipped: false,
+    reason: null,
+  };
+
+  if (!prisma.lead?.findMany || !prisma.task?.findMany || !prisma.task?.create) {
+    console.warn("[AUTOMATION] Lead automation models unavailable; skipping daily run.");
+    return {
+      ...defaultSummary,
+      skipped: true,
+      reason: "Lead or task models unavailable.",
+    };
+  }
+
+  const now = new Date();
+  const dayStart = startOfDay(now);
+  const dayEnd = endOfDay(now);
+  const followUpTaskDueInDays = safeNumber(process.env.HIGH_RISK_TASK_DUE_DAYS, 1);
+  const highRiskScoreThreshold = safeNumber(process.env.LEAD_HIGH_RISK_SCORE_THRESHOLD, 40);
+  const followUpSeverityThreshold = safeNumber(process.env.LEAD_FOLLOW_UP_WARNING_DAYS, 3);
+
+  let leads = [];
+  let existingLeadTasks = [];
+  try {
+    [leads, existingLeadTasks] = await Promise.all([
+      prisma.lead.findMany({
+        include: { leadOwner: true },
+        orderBy: { updatedAt: "desc" },
+      }),
+      prisma.task.findMany({
+        where: {
+          entityType: "lead",
+          status: {
+            notIn: Array.from(completedTaskStatuses),
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+  } catch (error) {
+    if (isMissingTableError(error)) {
+      console.warn("[DB] Lead automation tables missing; skipping daily run.");
+      return {
+        ...defaultSummary,
+        skipped: true,
+        reason: "Lead automation tables missing.",
+      };
+    }
+    throw error;
+  }
+
+  const leadTaskMap = existingLeadTasks.reduce((accumulator, task) => {
+    accumulator[task.entityId] ??= [];
+    accumulator[task.entityId].push(task);
+    return accumulator;
+  }, {});
+
+  let reminderEmailsSent = 0;
+  let automatedLeadEmailsSent = 0;
+  let highRiskTasksCreated = 0;
+
+  for (const lead of leads) {
+    if (isLeadClosed(lead.status)) continue;
+
+    const aiInsight = getAIInsights(lead);
+    await logPrediction(lead.id, aiInsight).catch((error) => {
+      if (shouldDebugApi) {
+        console.warn("[AI] Prediction log write failed", {
+          leadId: lead.id,
+          error: error?.message,
+        });
+      }
+    });
+    const followupEmailResult = await sendAutomatedLeadFollowup({
+      lead,
+      aiInsights: aiInsight,
+      prismaClient: prisma,
+    }).catch((error) => {
+      console.error("[AUTOMATION] Lead follow-up email failed", {
+        leadId: lead?.id,
+        error: error?.message || error,
+      });
+      return { sent: false, reason: "error" };
+    });
+    if (followupEmailResult?.sent) {
+      automatedLeadEmailsSent += 1;
+    }
+
+    const ownerLabel = getLeadOwnerLabel(lead);
+    const actionUrl = buildLeadActionUrl(lead.id);
+    const nextFollowUpDate = asDate(lead.nextFollowUpDate);
+    const companyLabel = String(lead.companyName || lead.leadName || "Lead").trim();
+    const contactLabel = String(lead.contactName || "Unknown contact").trim();
+
+    if (nextFollowUpDate && nextFollowUpDate <= dayEnd) {
+      const daysLate = Math.max(0, Math.ceil((dayStart.getTime() - nextFollowUpDate.getTime()) / (24 * 60 * 60 * 1000)));
+      const reminderSentToday = await wasLeadReminderSentToday(lead.id, dayStart);
+      const recipientEmail = resolveLeadReminderRecipient(lead);
+
+      await createNotificationIfMissing({
+        userId: ownerLabel,
+        title: "Lead follow-up due",
+        message: `${companyLabel} follow-up is due${daysLate > 0 ? ` (${daysLate} day${daysLate === 1 ? "" : "s"} overdue)` : " today"}. (lead-followup:${lead.id})`,
+        dedupeKey: `lead-followup:${lead.id}`,
+        entityType: "lead",
+        entityId: lead.id,
+        actionUrl,
+        severity: daysLate >= followUpSeverityThreshold ? "warning" : "info",
+        dedupeHours: 24,
+      });
+
+      if (!reminderSentToday && recipientEmail) {
+        const subject = `Follow-up due: ${companyLabel}`;
+        const body = [
+          `Lead: ${companyLabel} (${contactLabel})`,
+          `Owner: ${ownerLabel}`,
+          `Follow-up date: ${nextFollowUpDate.toISOString().slice(0, 10)}`,
+          `Recommended action: ${aiInsight.action || "Follow-up"}`,
+          "",
+          `Open lead: ${actionUrl}`,
+        ].join("\n");
+
+        const emailResult = await sendAutomationEmail({
+          prisma,
+          to: recipientEmail,
+          subject,
+          text: body,
+          entityType: "lead",
+          entityId: lead.id,
+        });
+        if (emailResult?.delivery === "sent") {
+          reminderEmailsSent += 1;
+        }
+      }
+    }
+
+    const isHighRisk =
+      String(aiInsight.riskLevel || aiInsight.risk || "").toLowerCase() === "high" ||
+      safeNumber(aiInsight.score, 0) <= highRiskScoreThreshold;
+    if (!isHighRisk) continue;
+
+    const hasHighRiskTask = (leadTaskMap[lead.id] || []).some((task) =>
+      String(task.title || "").toLowerCase().includes("high-risk lead"),
+    );
+    if (hasHighRiskTask) continue;
+
+    const dueDate = addDays(now, Math.max(1, followUpTaskDueInDays));
+    const createdTask = await prisma.task.create({
+      data: {
+        title: `High-risk lead intervention: ${companyLabel}`,
+        description: `Auto-created from AI scoring (${safeNumber(aiInsight.score, 0)}). Take immediate action.`,
+        assignedTo: ownerLabel,
+        entityType: "lead",
+        entityId: lead.id,
+        dueDate,
+        status: "pending",
+        priority: "high",
+      },
+    });
+    leadTaskMap[lead.id] = [...(leadTaskMap[lead.id] || []), createdTask];
+    highRiskTasksCreated += 1;
+
+    await createNotificationIfMissing({
+      userId: ownerLabel,
+      title: "High-risk lead task created",
+      message: `${companyLabel} flagged as high risk. Intervention task created. (lead-risk:${lead.id})`,
+      dedupeKey: `lead-risk:${lead.id}`,
+      entityType: "lead",
+      entityId: lead.id,
+      actionUrl,
+      severity: "critical",
+      dedupeHours: 24,
+    });
+  }
+
+  if (shouldDebugApi) {
+    console.debug("[AUTOMATION] Daily lead automation complete", {
+      remindersSent: reminderEmailsSent,
+      automatedLeadEmailsSent,
+      highRiskTasksCreated,
+      scannedLeads: leads.length,
+    });
+  }
+
+  return {
+    scannedLeads: leads.length,
+    remindersSent: reminderEmailsSent,
+    automatedLeadEmailsSent,
+    highRiskTasksCreated,
+    skipped: false,
+    reason: null,
+  };
 };
 
 const createNotificationIfMissing = async ({
@@ -1434,7 +1754,13 @@ app.get(
       }),
       prisma.opportunity.findMany({
         where: { stage: { notIn: [...wonOpportunityStatusList, ...lostOpportunityStatusList] } },
-        select: { dealValue: true, probability: true },
+        select: {
+          dealValue: true,
+          probability: true,
+          stage: true,
+          updatedAt: true,
+          createdAt: true,
+        },
       }),
       prisma.task.count({
         where: {
@@ -1582,8 +1908,8 @@ app.get(
 
     const revenueTrend = monthBuckets.map((item) => ({
       month: item.month,
-      actual: Math.round(item.actual),
-      forecast: Math.round(item.forecast),
+      actual: Math.round(safeNumber(item.actual, 0)),
+      forecast: Math.round(safeNumber(item.forecast, 0)),
     }));
 
     const stageDistribution = buildStageDistribution(leadStageGroups, opportunityStageGroups);
@@ -1647,7 +1973,22 @@ app.get(
       conversionRate: Number((conversionRateThisMonth - conversionRateLastMonth).toFixed(1)),
     };
 
-    const dealsAtRisk = activeOpportunitiesData.filter((item) => Number(item.probability || 0) < 40).length;
+    const opportunityHighRiskThreshold = safeNumber(
+      process.env.OPPORTUNITY_HIGH_RISK_SCORE_THRESHOLD,
+      40,
+    );
+    const dealsAtRisk = activeOpportunitiesData.filter((item) => {
+      const aiInsight = getAIInsights({
+        lastActivityDate: item.updatedAt || item.createdAt,
+        dealValue: item.dealValue,
+        probability: item.probability,
+        status: item.stage,
+      });
+      return (
+        String(aiInsight.riskLevel || aiInsight.risk || "").toLowerCase() === "high" ||
+        safeNumber(aiInsight.score, 0) <= opportunityHighRiskThreshold
+      );
+    }).length;
     const insights = [
       {
         type: "alert",
@@ -1683,11 +2024,11 @@ app.get(
       totalLeads,
       qualifiedLeads,
       activeOpportunities,
-      pipelineValue: Math.round(pipelineValue),
-      weightedRevenue: Math.round(weightedRevenue),
+      pipelineValue: Math.round(safeNumber(pipelineValue, 0)),
+      weightedRevenue: Math.round(safeNumber(weightedRevenue, 0)),
       dealsClosingThisMonth,
       tasksDueToday,
-      conversionRate,
+      conversionRate: safeNumber(conversionRate, 0),
       recentActivities,
       stageDistribution,
       revenueTrend,
@@ -1833,9 +2174,6 @@ app.get(
     const leadInteractionsMap = groupByEntityId(
       interactions.filter((interaction) => interaction.entityType === "lead"),
     );
-    const opportunityInteractionsMap = groupByEntityId(
-      interactions.filter((interaction) => interaction.entityType === "opportunity"),
-    );
 
     const overdueLeads = leads
       .map((lead) => {
@@ -1878,35 +2216,32 @@ app.get(
       .filter(Boolean);
 
     const highRiskDeals = [];
+    const opportunityHighRiskThreshold = safeNumber(
+      process.env.OPPORTUNITY_HIGH_RISK_SCORE_THRESHOLD,
+      40,
+    );
     for (const opportunity of opportunities) {
       if (wonOpportunityStages.has(opportunity.stage) || lostOpportunityStages.has(opportunity.stage)) {
         continue;
       }
-
-      const opportunityInteractions = opportunityInteractionsMap[opportunity.id] || [];
-      const interactionIds = opportunityInteractions.map((interaction) => interaction.id);
-      const followUpTasks =
-        interactionIds.length > 0
-          ? [...followUpTaskMap.values()].filter(
-              (task) => task.sourceInteractionId && interactionIds.includes(task.sourceInteractionId),
-            )
-          : [];
-      const intelligence = generateInsights({
-        entityType: "opportunity",
-        entity: opportunity,
-        stage: opportunity.stage,
-        interactions: opportunityInteractions,
-        followUpTasks,
+      const aiInsight = getAIInsights({
+        lastActivityDate: opportunity.updatedAt || opportunity.createdAt,
+        dealValue: opportunity.dealValue,
+        probability: opportunity.probability,
+        status: opportunity.stage,
       });
+      const isHighRisk =
+        String(aiInsight.riskLevel || aiInsight.risk || "").toLowerCase() === "high" ||
+        safeNumber(aiInsight.score, 0) <= opportunityHighRiskThreshold;
 
-      if (intelligence.risk !== "High") continue;
+      if (!isHighRisk) continue;
 
       highRiskDeals.push({
         id: opportunity.id,
         opportunityName: opportunity.opportunityName,
         companyName: opportunity.company?.companyName || opportunity.lead?.companyName || "Unknown Account",
-        probability: intelligence.probability,
-        recommendation: intelligence.recommendation,
+        probability: safeNumber(aiInsight.score, 0),
+        recommendation: aiInsight.action || "Follow-up",
         actionUrl: entityUrlFor("opportunity", opportunity.id),
       });
     }
@@ -2136,8 +2471,17 @@ app.post(
 app.post(
   "/api/automation-rules/run",
   asyncHandler(async (_req, res) => {
-    await runDealInactivityAutomation();
-    res.json({ ok: true });
+    const [dealAutomation, dailyLeadAutomation] = await Promise.all([
+      runDealInactivityAutomation().then(() => ({ ok: true })),
+      runDailyLeadAutomation(),
+    ]);
+    await runNotificationsSweep();
+
+    res.json({
+      ok: true,
+      dealAutomation,
+      dailyLeadAutomation,
+    });
   }),
 );
 
@@ -2536,6 +2880,18 @@ app.delete(
   asyncHandler(async (req, res) => {
     await prisma.task.delete({ where: { id: req.params.id } });
     res.status(204).end();
+  }),
+);
+
+app.get(
+  "/notifications",
+  allowAllRoles,
+  asyncHandler(async (_req, res) => {
+    const notifications = await prisma.notification.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    res.json(notifications.map(serializeNotification));
   }),
 );
 
@@ -3467,16 +3823,68 @@ app.post(
     res.status(201).json({ data: serializeRenewal(renewal) });
   }),
 );
+app.use((error, req, res, _next) => {
+  if (res.headersSent) return;
 
-app.use((error, _req, res, _next) => {
-  console.error(error);
-  res.status(500).json({ message: error.message || "Internal server error." });
+  const requestId = req.requestId || "unknown";
+  let statusCode = 500;
+  let message = error?.message || "Internal server error.";
+
+  if (error?.type === "entity.parse.failed") {
+    statusCode = 400;
+    message = "Invalid JSON payload.";
+  } else if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      statusCode = 409;
+      message = "Duplicate value violates a unique constraint.";
+    } else if (error.code === "P2025") {
+      statusCode = 404;
+      message = "Requested record was not found.";
+    } else if (error.code === "P2003" || error.code === "P2011") {
+      statusCode = 400;
+      message = "Invalid relational data provided.";
+    } else if (error.code === "P2021" || error.code === "P2022") {
+      statusCode = 503;
+      message = "Database schema is not ready.";
+    }
+  } else if (error instanceof Prisma.PrismaClientValidationError) {
+    statusCode = 400;
+    message = "Invalid request payload.";
+  } else if (error instanceof SyntaxError) {
+    statusCode = 400;
+    message = "Malformed request body.";
+  }
+
+  const context = {
+    requestId,
+    method: req.method,
+    path: req.originalUrl,
+    statusCode,
+  };
+
+  if (statusCode >= 500) {
+    console.error("[API] Unhandled error", context, error);
+  } else if (shouldDebugApi) {
+    console.warn("[API] Request error", context, error?.message || error);
+  }
+
+  res.status(statusCode).json({
+    message,
+    requestId,
+  });
 });
 
 const bootstrap = async () => {
+  process.on("unhandledRejection", (reason) => {
+    console.error("[PROCESS] Unhandled promise rejection", reason);
+  });
+  process.on("uncaughtException", (error) => {
+    console.error("[PROCESS] Uncaught exception", error);
+  });
+
   try {
     await prisma.$connect();
-    console.log("✅ DB connected");
+    console.log("[BOOT] Database connected.");
 
     const demoEmail = process.env.DEMO_USER_EMAIL || "admin@dattu.local";
     const demoPassword = process.env.DEMO_USER_PASSWORD || "QuantumCRM!2026";
@@ -3485,7 +3893,7 @@ const bootstrap = async () => {
     if (!tablesReady) {
       throw new Error("Required Prisma tables are missing. Run migrations before starting the backend.");
     }
-    console.log("✅ tables ready");
+    console.log("[BOOT] Required tables verified.");
 
     const existingUser = await prisma.user.findUnique({ where: { email: demoEmail } });
     if (!existingUser) {
@@ -3504,30 +3912,74 @@ const bootstrap = async () => {
     await ensureDefaultPipelineStages("lead");
     await ensureDefaultPipelineStages("opportunity");
 
-    app.listen(port, () => {
-      console.log(`🚀 Server running on ${port}`);
+    app.listen(PORT, () => {
+      console.log(`[BOOT] Server running on port ${PORT}.`);
+
+      const cronTimezone = process.env.AUTOMATION_TIMEZONE || process.env.TZ || "Asia/Kolkata";
+      const dailyLeadAutomationCron = process.env.DAILY_LEAD_AUTOMATION_CRON || "0 8 * * *";
+      const dealInactivityCron = process.env.DEAL_INACTIVITY_CRON || "0 */6 * * *";
+      const notificationsSweepCron = process.env.NOTIFICATIONS_SWEEP_CRON || "0 */2 * * *";
+
+      runDailyLeadAutomation().catch((error) => {
+        console.error("[AUTOMATION] Initial daily lead run failed", error);
+      });
+      cron.schedule(
+        dailyLeadAutomationCron,
+        () => {
+          runDailyLeadAutomation()
+            .then((summary) => {
+              if (shouldDebugApi) {
+                console.debug("[AUTOMATION] Daily lead cron complete", summary);
+              }
+            })
+            .catch((error) => {
+              console.error("[AUTOMATION] Daily lead cron failed", error);
+            });
+        },
+        { timezone: cronTimezone },
+      );
 
       runDealInactivityAutomation().catch((error) => {
         console.error("[AUTOMATION] Initial run failed", error);
       });
-      setInterval(() => {
-        runDealInactivityAutomation().catch((error) => {
-          console.error("[AUTOMATION] Scheduled run failed", error);
-        });
-      }, 6 * 60 * 60 * 1000);
+      cron.schedule(
+        dealInactivityCron,
+        () => {
+          runDealInactivityAutomation().catch((error) => {
+            console.error("[AUTOMATION] Scheduled run failed", error);
+          });
+        },
+        { timezone: cronTimezone },
+      );
 
       runNotificationsSweep().catch((error) => {
         console.error("[NOTIFICATIONS] Initial sweep failed", error);
       });
-      setInterval(() => {
-        runNotificationsSweep().catch((error) => {
-          console.error("[NOTIFICATIONS] Scheduled sweep failed", error);
-        });
-      }, 2 * 60 * 60 * 1000);
+      cron.schedule(
+        notificationsSweepCron,
+        () => {
+          runNotificationsSweep().catch((error) => {
+            console.error("[NOTIFICATIONS] Scheduled sweep failed", error);
+          });
+        },
+        { timezone: cronTimezone },
+      );
+
+      console.log("[BOOT] Automation schedules active", {
+        timezone: cronTimezone,
+        dailyLeadAutomationCron,
+        dealInactivityCron,
+        notificationsSweepCron,
+      });
     });
   } catch (error) {
-    console.error("❌ Server failed:", error);
+    console.error("[BOOT] Server failed to start", error);
   }
 };
 
-void bootstrap();
+if (process.env.NODE_ENV !== "test") {
+  void bootstrap();
+}
+
+export default app;
+

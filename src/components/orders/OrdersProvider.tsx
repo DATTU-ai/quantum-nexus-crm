@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import { order_api_endpoints } from "@/lib/orderApi";
 import type {
   CreateOrderDocumentInput,
@@ -64,6 +64,17 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
   const [activities, setActivities] = useState<OrderActivityRecord[]>([]);
 
   const loadOrders = async () => {
+    if (!hasStoredAuthToken()) {
+      setWorkOrders([]);
+      setImplementations([]);
+      setInvoices([]);
+      setPayments([]);
+      setDocuments([]);
+      setRenewals([]);
+      setActivities([]);
+      return;
+    }
+
     try {
       const response = await apiRequest<ListResponse<OrdersPayload>>(order_api_endpoints.orders);
       setWorkOrders(response.data.workOrders ?? []);
@@ -74,7 +85,7 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
       setRenewals(response.data.renewals ?? []);
       setActivities(response.data.activities ?? []);
     } catch (error) {
-      console.error("Orders load failed:", error);
+      console.warn("Orders load failed:", error);
     }
   };
 
@@ -146,7 +157,7 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
       await loadOrders();
       return response.data;
     } catch (error) {
-      console.error("Create work order failed:", error);
+      console.warn("Create work order failed:", error);
       throw error;
     }
   };
@@ -172,7 +183,7 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
       await loadOrders();
       return response.data;
     } catch (error) {
-      console.error("Create invoice failed:", error);
+      console.warn("Create invoice failed:", error);
       throw error;
     }
   };
@@ -189,7 +200,7 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
       await loadOrders();
       return response.data;
     } catch (error) {
-      console.error("Record payment failed:", error);
+      console.warn("Record payment failed:", error);
       throw error;
     }
   };
@@ -213,7 +224,7 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
       await loadOrders();
       return response.data;
     } catch (error) {
-      console.error("Create order document failed:", error);
+      console.warn("Create order document failed:", error);
       throw error;
     }
   };
@@ -230,7 +241,7 @@ export const OrdersProvider = ({ children }: { children: ReactNode }) => {
       await loadOrders();
       return response.data;
     } catch (error) {
-      console.error("Create renewal failed:", error);
+      console.warn("Create renewal failed:", error);
       throw error;
     }
   };
@@ -270,3 +281,4 @@ export const useOrdersData = () => {
 
   return context;
 };
+

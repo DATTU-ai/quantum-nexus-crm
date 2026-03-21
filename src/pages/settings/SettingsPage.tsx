@@ -52,7 +52,7 @@ const SettingsPage = () => {
         setCurrency(currencyResponse.data?.value || "USD");
         setAutomationRules(automationResponse.data ?? []);
       } catch (error) {
-        console.error("Settings load failed:", error);
+        console.warn("Settings load failed:", error);
       }
     };
 
@@ -87,7 +87,7 @@ const SettingsPage = () => {
         current.map((item) => (item.id === stage.id ? { ...item, ...updated } : item)),
       );
     } catch (error) {
-      console.error("Pipeline stage update failed:", error);
+      console.warn("Pipeline stage update failed:", error);
     }
   };
 
@@ -106,7 +106,7 @@ const SettingsPage = () => {
       if (entityType === "lead") setNewLeadStage("");
       else setNewOpportunityStage("");
     } catch (error) {
-      console.error("Create pipeline stage failed:", error);
+      console.warn("Create pipeline stage failed:", error);
     }
   };
 
@@ -116,7 +116,7 @@ const SettingsPage = () => {
       const setter = entityType === "lead" ? setLeadStages : setOpportunityStages;
       setter((current) => current.filter((stage) => stage.id !== id));
     } catch (error) {
-      console.error("Delete pipeline stage failed:", error);
+      console.warn("Delete pipeline stage failed:", error);
     }
   };
 
@@ -147,7 +147,7 @@ const SettingsPage = () => {
         current.map((item) => (item.id === template.id ? { ...item, ...updated } : item)),
       );
     } catch (error) {
-      console.error("Update email template failed:", error);
+      console.warn("Update email template failed:", error);
     }
   };
 
@@ -156,7 +156,7 @@ const SettingsPage = () => {
       await apiRequest(`/email-templates/${id}`, { method: "DELETE" });
       setEmailTemplates((current) => current.filter((template) => template.id !== id));
     } catch (error) {
-      console.error("Delete email template failed:", error);
+      console.warn("Delete email template failed:", error);
     }
   };
 
@@ -170,7 +170,7 @@ const SettingsPage = () => {
       setEmailTemplates((current) => [response.data, ...current]);
       setNewTemplate({ name: "", type: "lead", subject: "", body: "" });
     } catch (error) {
-      console.error("Create email template failed:", error);
+      console.warn("Create email template failed:", error);
     }
   };
 
@@ -181,7 +181,7 @@ const SettingsPage = () => {
         body: { value: currency },
       });
     } catch (error) {
-      console.error("Currency update failed:", error);
+      console.warn("Currency update failed:", error);
     }
   };
 
@@ -202,7 +202,7 @@ const SettingsPage = () => {
         current.map((item) => (item.id === rule.id ? { ...item, ...updated } : item)),
       );
     } catch (error) {
-      console.error("Automation rule update failed:", error);
+      console.warn("Automation rule update failed:", error);
     }
   };
 
@@ -210,7 +210,7 @@ const SettingsPage = () => {
     try {
       await apiRequest("/automation-rules/run", { method: "POST" });
     } catch (error) {
-      console.error("Automation run failed:", error);
+      console.warn("Automation run failed:", error);
     }
   };
 
@@ -486,3 +486,4 @@ const SettingsPage = () => {
 };
 
 export default SettingsPage;
+

@@ -1,4 +1,4 @@
-﻿import type { CreateLeadFlowLeadInput, LeadFlowBoardState, LeadFlowLead, LeadFlowStage } from "@/types/leadFlow";
+import type { CreateLeadFlowLeadInput, LeadFlowBoardState, LeadFlowLead, LeadFlowStage } from "@/types/leadFlow";
 import { leadFlowStages } from "@/types/leadFlow";
 
 const createLead = (lead: LeadFlowLead): LeadFlowLead => lead;
@@ -243,3 +243,4 @@ export const getLeadFlowTotals = (board: LeadFlowBoardState, stage: LeadFlowStag
   count: board[stage].length,
   value: board[stage].reduce((sum, lead) => sum + lead.dealValue, 0),
 });
+

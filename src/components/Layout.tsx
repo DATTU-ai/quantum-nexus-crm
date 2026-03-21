@@ -1,15 +1,16 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { formatDistanceToNow, parseISO } from "date-fns";
+import { formatDistanceToNow, isValid, parseISO } from "date-fns";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import QuantumBackground from "@/components/QuantumBackground";
 import { Input } from "@/components/ui/input";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import type { SearchResultRecord } from "@/types/dashboard";
 import { ArrowLeft, Bell, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import type { NotificationRecord } from "@/types/notifications";
+import NotificationPanel from "@/components/NotificationPanel";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,6 +33,35 @@ const resolveNotificationHref = (notification: NotificationRecord) => {
   return null;
 };
 
+const formatRelativeNotificationTime = (value?: string | null) => {
+  if (!value) return "just now";
+  const parsed = parseISO(value);
+  return isValid(parsed) ? formatDistanceToNow(parsed, { addSuffix: true }) : "just now";
+};
+
+const getNotificationToneClasses = (notification: NotificationRecord) => {
+  const severity = String(notification?.severity || "").trim().toLowerCase();
+
+  if (severity === "high" || severity === "critical" || severity === "danger") {
+    return {
+      card: "border-l-2 border-l-rose-500/80 bg-rose-500/5",
+      dot: "bg-rose-500",
+    };
+  }
+
+  if (severity === "warning") {
+    return {
+      card: "border-l-2 border-l-amber-400/80 bg-amber-500/5",
+      dot: "bg-amber-400",
+    };
+  }
+
+  return {
+    card: "border-l-2 border-l-sky-400/80 bg-sky-500/5",
+    dot: "bg-sky-400",
+  };
+};
+
 const Layout = ({ children }: LayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,9 +70,11 @@ const Layout = ({ children }: LayoutProps) => {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const hasLoadedNotifications = useRef(false);
+  const notificationButtonRef = useRef<HTMLButtonElement | null>(null);
+  const notificationPanelRef = useRef<HTMLDivElement | null>(null);
+  const hasAuthToken = hasStoredAuthToken();
   const deferredQuery = useDeferredValue(searchQuery.trim());
-  const unreadCount = notifications.filter((item) => !item.read).length;
+  const unreadCount = notifications.filter((item) => !item?.read).length;
   const groupedResults = results.reduce<Record<string, SearchResultRecord[]>>((accumulator, result) => {
     accumulator[result.type] = accumulator[result.type] || [];
     accumulator[result.type].push(result);
@@ -63,7 +95,7 @@ const Layout = ({ children }: LayoutProps) => {
   const showBackButton = location.pathname !== "/dashboard" && location.pathname !== "/";
 
   useEffect(() => {
-    if (deferredQuery.length < 2) {
+    if (!hasAuthToken || deferredQuery.length < 2) {
       setResults([]);
       return;
     }
@@ -75,30 +107,74 @@ const Layout = ({ children }: LayoutProps) => {
         );
         setResults(response.data ?? []);
       } catch (error) {
-        console.error("Search request failed:", error);
+        if (import.meta.env.DEV) {
+          console.warn("Search request failed:", error);
+        }
         setResults([]);
       }
     };
 
     void loadSearchResults();
-  }, [deferredQuery]);
+  }, [deferredQuery, hasAuthToken]);
 
   useEffect(() => {
-    if (hasLoadedNotifications.current) return;
-    hasLoadedNotifications.current = true;
+    if (!hasAuthToken) {
+      setNotifications([]);
+      return undefined;
+    }
 
-    const fetchNotifications = async () => {
+    let active = true;
+    const fetchNotifications = async (silent = false) => {
       try {
         const response = await apiRequest<{ data: NotificationRecord[] }>("/notifications?scope=mine");
+        if (!active) return;
         setNotifications(response.data ?? []);
       } catch (error) {
-        console.error("Notifications load failed:", error);
-        setNotifications([]);
+        if (silent) return;
+        if (import.meta.env.DEV) {
+          console.warn("Notifications load failed:", error);
+        }
+        if (active) {
+          setNotifications([]);
+        }
       }
     };
 
     void fetchNotifications();
-  }, []);
+    const intervalId = window.setInterval(() => {
+      void fetchNotifications(true);
+    }, 30000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [hasAuthToken]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (notificationButtonRef.current?.contains(event.target)) return;
+      if (notificationPanelRef.current?.contains(event.target)) return;
+      setIsNotificationsOpen(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isNotificationsOpen]);
 
   const markNotificationRead = async (notification: NotificationRecord) => {
     if (notification.read) return;
@@ -111,7 +187,9 @@ const Layout = ({ children }: LayoutProps) => {
         current.map((item) => (item.id === notification.id ? { ...item, read: true } : item)),
       );
     } catch (error) {
-      console.error("Notification update failed:", error);
+      if (import.meta.env.DEV) {
+        console.warn("Notification update failed:", error);
+      }
     }
   };
 
@@ -193,47 +271,18 @@ const Layout = ({ children }: LayoutProps) => {
             <div className="flex items-center gap-4">
               <div className="relative">
                 <button
+                  ref={notificationButtonRef}
+                  type="button"
                   className="relative rounded-xl border border-transparent p-2 transition-all duration-200 hover:border-primary/30 hover:bg-card/90 hover:shadow-[0_0_12px_rgba(99,102,241,0.24)]"
                   onClick={() => setIsNotificationsOpen((open) => !open)}
-                  onBlur={() => window.setTimeout(() => setIsNotificationsOpen(false), 120)}
+                  aria-expanded={isNotificationsOpen}
+                  aria-haspopup="dialog"
                 >
                   <Bell className="h-4 w-4 text-muted-foreground" />
                   {unreadCount > 0 ? (
                     <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-info animate-glow-pulse" />
                   ) : null}
                 </button>
-                {isNotificationsOpen ? (
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-80 overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-xl">
-                    <div className="border-b border-border/50 px-4 py-3">
-                      <p className="text-sm font-semibold text-foreground">Notifications</p>
-                      <p className="text-xs text-muted-foreground">{unreadCount} unread</p>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="px-4 py-6 text-sm text-muted-foreground">No notifications yet.</div>
-                      ) : (
-                        notifications.map((notification) => (
-                          <button
-                            key={notification.id}
-                            type="button"
-                            className={`flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left transition-colors hover:bg-secondary/40 ${notification.read ? "opacity-70" : ""}`}
-                            onClick={() => {
-                              void handleNotificationClick(notification);
-                            }}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium text-foreground">{notification.title}</span>
-                              <span className="text-[10px] uppercase text-muted-foreground">
-                                {formatDistanceToNow(parseISO(notification.createdAt), { addSuffix: true })}
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">{notification.message}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 rounded-full border border-primary/30 bg-[linear-gradient(135deg,rgba(99,102,241,0.22),rgba(56,189,248,0.12))] flex items-center justify-center text-xs font-semibold text-foreground shadow-[0_0_14px_rgba(99,102,241,0.18)]">
@@ -247,8 +296,52 @@ const Layout = ({ children }: LayoutProps) => {
           </main>
         </div>
       </div>
+      {isNotificationsOpen ? (
+        <NotificationPanel>
+          <div
+            ref={notificationPanelRef}
+            className="overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-lg backdrop-blur-md"
+          >
+            <div className="border-b border-border/50 px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">Notifications</p>
+              <p className="text-xs text-muted-foreground">{unreadCount} unread</p>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-muted-foreground">No notifications yet.</div>
+              ) : (
+                notifications.map((notification) => {
+                  const tone = getNotificationToneClasses(notification);
+                  return (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      className={`flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left transition-colors hover:bg-secondary/40 ${tone.card} ${notification.read ? "opacity-70" : ""}`}
+                      onClick={() => {
+                        void handleNotificationClick(notification);
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+                          <span className={`h-2 w-2 rounded-full ${tone.dot}`} />
+                          {notification.title}
+                        </span>
+                        <span className="text-[10px] uppercase text-muted-foreground">
+                          {formatRelativeNotificationTime(notification.createdAt)}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{notification.message}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </NotificationPanel>
+      ) : null}
     </SidebarProvider>
   );
 };
 
 export default Layout;
+

@@ -1,62 +1,77 @@
 import { motion } from "framer-motion";
-import type { DashboardFunnelRecord } from "@/types/dashboard";
-import { hexToRgba, themePalette } from "@/lib/theme";
+import type { DashboardStageDistribution } from "@/types/dashboard";
 import { formatINR } from "@/utils/currency";
 
-const stageToneMap = {
-  Cold: hexToRgba(themePalette.slate, 0.72),
-  Qualified: hexToRgba(themePalette.teal, 0.72),
-  Demo: hexToRgba(themePalette.info, 0.72),
-  Trial: hexToRgba(themePalette.primary, 0.72),
-  Proposal: hexToRgba(themePalette.warning, 0.72),
-  Won: hexToRgba(themePalette.emerald, 0.72),
-} as const;
+const stageColorClassMap: Record<string, string> = {
+  Cold: "bg-slate-400/85",
+  Qualified: "bg-teal-400/85",
+  Demo: "bg-cyan-500/85",
+  Trial: "bg-indigo-500/85",
+  Proposal: "bg-amber-500/90",
+  Won: "bg-emerald-500/90",
+};
+
+const stageOrder = ["Cold", "Qualified", "Demo", "Trial", "Proposal", "Won"];
 
 interface SalesFunnelProps {
-  data: DashboardFunnelRecord[];
+  data: DashboardStageDistribution[];
+  onStageClick?: (stage: string) => void;
 }
 
-const SalesFunnel = ({ data }: SalesFunnelProps) => {
-  const maxCount = Math.max(1, ...data.map((item) => item.count));
+const getStageRank = (stage: string) => {
+  const index = stageOrder.indexOf(stage);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+};
+
+const SalesFunnel = ({ data, onStageClick }: SalesFunnelProps) => {
+  const funnelData = [...data].sort((a, b) => getStageRank(a.stage) - getStageRank(b.stage));
 
   return (
     <div className="glass-card p-6">
       <div className="section-header">
         <h3 className="section-title">Sales Funnel</h3>
-        <p className="section-subtitle">Pipeline stage breakdown.</p>
+        <p className="section-subtitle">Cold to won pipeline progression across leads and opportunities.</p>
       </div>
-      <div className="space-y-4">
-        {data.map((stage, i) => {
-          const width = Math.max((stage.count / maxCount) * 100, 15);
-          const tone = stageToneMap[stage.stage as keyof typeof stageToneMap] ?? hexToRgba(themePalette.primary, 0.72);
+      <div className="mt-4 flex flex-col items-center space-y-2">
+        {funnelData.length === 0 ? (
+          <div className="w-full rounded-xl border border-dashed border-border/70 bg-secondary/30 px-4 py-8 text-center text-sm text-muted-foreground">
+            No funnel data available yet.
+          </div>
+        ) : (
+          funnelData.map((stage, index) => {
+            const widthPercent = Math.max(40, 100 - index * 12);
+            const stageColor = stageColorClassMap[stage.stage] ?? "bg-primary/80";
+            const stageCount = Number.isFinite(stage.count) ? stage.count : 0;
+            const stageValue = Number.isFinite(stage.value) ? stage.value : 0;
 
-          return (
-            <motion.div
-              key={stage.stage}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className="group cursor-pointer"
-            >
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-muted-foreground transition-colors group-hover:text-foreground">{stage.stage}</span>
-                <span className="font-mono text-muted-foreground">{stage.count} - {formatINR(stage.value)}</span>
-              </div>
-              <div className="h-8 overflow-hidden rounded-xl border border-border/70 bg-secondary/50">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${width}%` }}
-                  transition={{ delay: i * 0.08 + 0.15, duration: 0.5, ease: "easeOut" }}
-                  className="h-full rounded-xl transition-all duration-300 group-hover:opacity-95"
-                  style={{ background: `linear-gradient(90deg, ${tone}, rgba(255,255,255,0.06))` }}
-                />
-              </div>
-            </motion.div>
-          );
-        })}
+            return (
+              <motion.button
+                key={stage.stage}
+                type="button"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.08 }}
+                className={`${stageColor} shadow-lg backdrop-blur-md w-full max-w-xl rounded-md py-2 text-center text-sm text-white transition-all duration-300 hover:opacity-95`}
+                style={{ width: `${widthPercent}%`, transition: "all 0.3s ease" }}
+                onClick={() => onStageClick?.(stage.stage)}
+              >
+                <span className="font-medium">{stage.stage} ({stageCount})</span>
+                <span className="ml-2 text-white/80">{formatINR(stageValue)}</span>
+              </motion.button>
+            );
+          })
+        )}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+        {funnelData.map((stage) => (
+          <span key={stage.stage} className="rounded-full border border-border/70 px-3 py-1">
+            {stage.stage}: {Number.isFinite(stage.count) ? stage.count : 0}
+          </span>
+        ))}
       </div>
     </div>
   );
 };
 
 export default SalesFunnel;
+

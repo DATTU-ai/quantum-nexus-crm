@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import {
   company_api_endpoints,
 } from "@/lib/companyApi";
@@ -87,12 +87,18 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const loadCompanies = async () => {
+      if (!hasStoredAuthToken()) {
+        setCompanies([]);
+        setContacts([]);
+        return;
+      }
+
       try {
         const response = await apiRequest<CompaniesListResponse>(company_api_endpoints.companies);
         setCompanies(response.data.companies ?? []);
         setContacts(response.data.contacts ?? []);
       } catch (error) {
-        console.error("Companies load failed:", error);
+        console.warn("Companies load failed:", error);
       }
     };
 
@@ -173,7 +179,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
 
       return detail;
     } catch (error) {
-      console.error("Company detail load failed:", error);
+      console.warn("Company detail load failed:", error);
       return null;
     }
   };
@@ -187,7 +193,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
       setCompanies((current) => [response.data, ...current]);
       return response.data;
     } catch (error) {
-      console.error("Create company failed:", error);
+      console.warn("Create company failed:", error);
       throw error;
     }
   };
@@ -207,7 +213,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
         return next;
       });
     } catch (error) {
-      console.error("Delete company failed:", error);
+      console.warn("Delete company failed:", error);
       throw error;
     }
   };
@@ -242,7 +248,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
       });
       return response.data;
     } catch (error) {
-      console.error("Create company contact failed:", error);
+      console.warn("Create company contact failed:", error);
       throw error;
     }
   };
@@ -282,7 +288,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
       });
       return response.data;
     } catch (error) {
-      console.error("Create company activity failed:", error);
+      console.warn("Create company activity failed:", error);
       throw error;
     }
   };
@@ -320,7 +326,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
       });
       return response.data;
     } catch (error) {
-      console.error("Create company document failed:", error);
+      console.warn("Create company document failed:", error);
       throw error;
     }
   };
@@ -369,3 +375,4 @@ export const useCompaniesData = () => {
 
   return context;
 };
+

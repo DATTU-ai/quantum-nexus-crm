@@ -29,7 +29,7 @@ const DemoTrials = () => {
         const response = await apiRequest<{ data: DemoTrialRecord[] }>("/demo-trials");
         setTrialData(response.data ?? []);
       } catch (error) {
-        console.error("Demo trials load failed:", error);
+        console.warn("Demo trials load failed:", error);
       }
     };
 
@@ -110,3 +110,4 @@ const DemoTrials = () => {
 };
 
 export default DemoTrials;
+

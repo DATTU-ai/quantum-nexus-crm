@@ -1,4 +1,4 @@
-﻿import { format, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { CalendarClock, FileText, Mail, MessageCircle, PhoneCall } from "lucide-react";
 import type { ComponentType } from "react";
 import { type LeadActivity } from "@/types/pipeline";
@@ -54,4 +54,5 @@ const ActivityTimeline = ({ activities }: ActivityTimelineProps) => {
 };
 
 export default ActivityTimeline;
+
 

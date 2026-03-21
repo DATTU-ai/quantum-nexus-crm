@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState, type DragEvent } from "react";
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BadgeCheck,
@@ -30,8 +30,11 @@ import ScheduleDemoModal from "@/components/pipeline/actions/ScheduleDemoModal";
 import { Button } from "@/components/ui/button";
 import { leadConversionStages, defaultPipelineFilters } from "@/data/pipelineMockData";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { apiRequest } from "@/lib/apiClient";
+import { buildLeadAiInsight, buildFallbackLeadAiInsight, getLeadAiCacheSignature, leadNeedsFollowUp } from "@/lib/leadAi";
 import { getLeadStageIndex, leadStageDescriptions } from "@/lib/leadPipeline";
 import { toast } from "sonner";
+import type { LeadAiInsight, LeadNextActionResponse } from "@/types/ai";
 import { leadPipelineStages, leadSources, type KPIStat, type LeadPipelineStage, type PipelineDeal, type PipelineFilters } from "@/types/pipeline";
 import { useSearchParams } from "react-router-dom";
 
@@ -104,7 +107,13 @@ const LeadsPipeline = () => {
   const [isImportLeadsOpen, setIsImportLeadsOpen] = useState(false);
   const [isCreateOpportunityOpen, setIsCreateOpportunityOpen] = useState(false);
   const [isScheduleDemoOpen, setIsScheduleDemoOpen] = useState(false);
+  const [aiInsight, setAiInsight] = useState<LeadAiInsight | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const { teamMembers } = useTeamMembers();
+  const aiInsightCacheRef = useRef(
+    new Map<string, { signature: string; insight: LeadAiInsight }>(),
+  );
+  const aiRequestRef = useRef(0);
   const stageSlugMap = useMemo(
     () =>
       Object.fromEntries(
@@ -237,6 +246,8 @@ const LeadsPipeline = () => {
     filteredLeads[0] ??
     leadDataset[0] ??
     null;
+  const displayAiInsight = aiInsight ?? (activeLead ? buildFallbackLeadAiInsight(activeLead) : null);
+  const shouldShowFollowUpCta = displayAiInsight ? leadNeedsFollowUp(displayAiInsight) : false;
 
   const kpiStats = useMemo<KPIStat[]>(() => {
     const totalLeads = leadDataset.length;
@@ -321,6 +332,56 @@ const LeadsPipeline = () => {
   const demoCandidates = leadDataset.filter((lead) => openLeadStages.has(lead.stage));
   const canConvertActiveLead = Boolean(activeLead && leadConversionStages.has(activeLead.stage) && openLeadStages.has(activeLead.stage));
 
+  const loadAiInsight = useCallback(async (lead: LeadRecord) => {
+    const requestId = ++aiRequestRef.current;
+    const signature = getLeadAiCacheSignature(lead);
+    const cached = aiInsightCacheRef.current.get(lead.id);
+
+    if (cached?.signature === signature) {
+      if (aiRequestRef.current === requestId) {
+        setAiInsight(cached.insight);
+        setIsAiLoading(false);
+      }
+      return;
+    }
+
+    setAiInsight(null);
+    setIsAiLoading(true);
+
+    try {
+      const response = await apiRequest<LeadNextActionResponse>(
+        `/ai/next-action/${lead.id}`,
+        { skipAuth: true },
+      );
+      const nextInsight = buildLeadAiInsight(lead, response);
+
+      aiInsightCacheRef.current.set(lead.id, {
+        signature,
+        insight: nextInsight,
+      });
+
+      if (aiRequestRef.current === requestId) {
+        setAiInsight(nextInsight);
+      }
+    } catch (error) {
+      const fallbackInsight = buildFallbackLeadAiInsight(lead);
+
+      aiInsightCacheRef.current.set(lead.id, {
+        signature,
+        insight: fallbackInsight,
+      });
+
+      if (aiRequestRef.current === requestId) {
+        console.warn("Lead AI insight load failed:", error);
+        setAiInsight(fallbackInsight);
+      }
+    } finally {
+      if (aiRequestRef.current === requestId) {
+        setIsAiLoading(false);
+      }
+    }
+  }, []);
+
   const setFilter = <K extends keyof PipelineFilters>(key: K, value: PipelineFilters[K]) => {
     if (key === "stage") {
       setStageGroup(null);
@@ -335,6 +396,16 @@ const LeadsPipeline = () => {
       setStageGroup(null);
     });
   };
+
+  const handleSelectLead = useCallback((leadId: string) => {
+    setActiveLeadId(leadId);
+    const selectedLead =
+      leadDataset.find((lead) => lead.id === leadId) ?? null;
+
+    if (selectedLead) {
+      void loadAiInsight(selectedLead);
+    }
+  }, [leadDataset, loadAiInsight]);
 
   const handleDragStart = (leadId: string, sourceStage: LeadPipelineStage, event: DragEvent<HTMLElement>) => {
     event.dataTransfer.setData("text/lead-id", leadId);
@@ -389,6 +460,15 @@ const LeadsPipeline = () => {
     setIsDetailsOpen(true);
   };
 
+  const handleScheduleFollowUp = () => {
+    if (!activeLead) {
+      toast.error("Select a lead before scheduling a follow-up.");
+      return;
+    }
+
+    setIsDetailsOpen(true);
+  };
+
   const handleConvertLead = async () => {
     if (!activeLead) {
       toast.error("Select a lead before converting it.");
@@ -411,6 +491,17 @@ const LeadsPipeline = () => {
     setIsDetailsOpen(false);
     toast.success(`${opportunity.companyInfo.companyName} was moved to the opportunities pipeline.`);
   };
+
+  useEffect(() => {
+    if (!activeLead) {
+      aiRequestRef.current += 1;
+      setAiInsight(null);
+      setIsAiLoading(false);
+      return;
+    }
+
+    void loadAiInsight(activeLead);
+  }, [activeLead, loadAiInsight]);
 
   return (
     <div className="relative max-w-[1600px] space-y-6">
@@ -505,7 +596,7 @@ const LeadsPipeline = () => {
                     draggingLeadId={dragState?.leadId ?? null}
                     isActiveDropTarget={isHovering && isValidTarget}
                     isBlockedDropTarget={isHovering && !isValidTarget}
-                    onSelectLead={setActiveLeadId}
+                    onSelectLead={handleSelectLead}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onDragOver={handleColumnDragOver}
@@ -520,7 +611,10 @@ const LeadsPipeline = () => {
 
         <LeadAIInsightPanel
           lead={activeLead}
+          aiInsight={aiInsight}
+          isAiLoading={isAiLoading}
           canConvert={canConvertActiveLead}
+          onScheduleFollowUp={shouldShowFollowUpCta ? handleScheduleFollowUp : undefined}
           onViewDetails={handleOpenLeadDetails}
           onConvert={handleConvertLead}
         />
@@ -554,9 +648,17 @@ const LeadsPipeline = () => {
         onSubmit={scheduleDemo}
       />
 
-      <LeadDetailsDrawer open={isDetailsOpen} lead={activeLead} onOpenChange={setIsDetailsOpen} entityType="lead" />
+      <LeadDetailsDrawer
+        open={isDetailsOpen}
+        lead={activeLead}
+        onOpenChange={setIsDetailsOpen}
+        entityType="lead"
+        leadAiInsight={aiInsight}
+        isLeadAiLoading={isAiLoading}
+      />
     </div>
   );
 };
 
 export default LeadsPipeline;
+

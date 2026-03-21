@@ -87,6 +87,67 @@ export interface DashboardSummaryPayload {
   kpiTrends: DashboardKpiTrends;
 }
 
+export interface AgentAlertLead {
+  id: string;
+  companyName: string;
+  contactName: string;
+  owner: string;
+  actionUrl: string;
+  riskLevel?: string;
+  action?: string;
+}
+
+export interface AgentOverdueLead extends AgentAlertLead {
+  daysOverdue: number;
+  nextFollowUpDate: string | null;
+  score: number;
+}
+
+export interface AgentInactiveLead extends AgentAlertLead {
+  daysWithoutActivity: number;
+  lastActivityDate: string | null;
+}
+
+export interface AgentHighRiskLead extends AgentAlertLead {
+  score: number;
+  reason: string;
+  nextFollowUpDate: string | null;
+  daysIdle: number;
+}
+
+export interface AgentUrgentAction {
+  id: string;
+  leadId: string;
+  contactName: string;
+  companyName: string;
+  owner: string;
+  category: "overdue" | "highRisk" | "inactive";
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  title: string;
+  message: string;
+  action: string;
+  riskLevel: string;
+  score: number;
+  actionUrl: string;
+  nextFollowUpDate: string | null;
+  daysIdle: number;
+}
+
+export interface AgentAlertsPayload {
+  overdueLeads: AgentOverdueLead[];
+  inactiveLeads: AgentInactiveLead[];
+  highRiskLeads: AgentHighRiskLead[];
+  highRiskDeals: AgentHighRiskLead[];
+  urgentActions: AgentUrgentAction[];
+  counts: {
+    overdue: number;
+    inactive: number;
+    highRisk: number;
+    urgent: number;
+  };
+  generatedAt: string;
+}
+
 export interface SearchResultRecord {
   type: string;
   id: string;
@@ -101,3 +162,4 @@ export interface AiIntelligencePayload {
   conversionData: Array<{ name: string; rate: number }>;
   productPerformance: Array<{ name: string; value: number }>;
 }
+

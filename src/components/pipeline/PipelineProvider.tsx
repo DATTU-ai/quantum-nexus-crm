@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiRequest } from "@/lib/apiClient";
+import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import { pipeline_api_endpoints } from "@/lib/pipelineApi";
+import { normalizeLeadRecord, type PublicLeadResponseItem } from "@/lib/publicLeadApi";
 import type {
   CreateLeadInput,
   CreateOpportunityInput,
@@ -45,15 +46,32 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const loadPipeline = async () => {
+      const hasAuthToken = hasStoredAuthToken();
+
       try {
-        const [leadResponse, opportunityResponse] = await Promise.all([
-          apiRequest<ListResponse<PipelineDeal>>(pipeline_api_endpoints.leads),
-          apiRequest<ListResponse<PipelineDeal>>(pipeline_api_endpoints.opportunities),
-        ]);
-        setLeadRecords(leadResponse.data ?? []);
+        const leadResponse = await apiRequest<ListResponse<PublicLeadResponseItem>>(
+          pipeline_api_endpoints.publicLeads,
+          { skipAuth: true },
+        );
+        setLeadRecords((leadResponse.data ?? []).map(normalizeLeadRecord));
+      } catch (error) {
+        console.warn("Lead pipeline load failed:", error);
+        setLeadRecords([]);
+      }
+
+      if (!hasAuthToken) {
+        setOpportunityRecords([]);
+        return;
+      }
+
+      try {
+        const opportunityResponse = await apiRequest<ListResponse<PipelineDeal>>(
+          pipeline_api_endpoints.opportunities,
+        );
         setOpportunityRecords(opportunityResponse.data ?? []);
       } catch (error) {
-        console.error("Pipeline load failed:", error);
+        console.warn("Opportunity pipeline load failed:", error);
+        setOpportunityRecords([]);
       }
     };
 
@@ -71,7 +89,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       );
       emitDataChange();
     } catch (error) {
-      console.error("Move lead failed:", error);
+      console.warn("Move lead failed:", error);
       throw error;
     }
   };
@@ -93,7 +111,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       }
       emitDataChange();
     } catch (error) {
-      console.error("Move opportunity failed:", error);
+      console.warn("Move opportunity failed:", error);
       throw error;
     }
   };
@@ -111,7 +129,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       emitDataChange();
       return response.data;
     } catch (error) {
-      console.error("Convert lead failed:", error);
+      console.warn("Convert lead failed:", error);
       return null;
     }
   };
@@ -126,7 +144,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       emitDataChange();
       return response.data;
     } catch (error) {
-      console.error("Add lead failed:", error);
+      console.warn("Add lead failed:", error);
       throw error;
     }
   };
@@ -141,7 +159,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       emitDataChange();
       return response.data;
     } catch (error) {
-      console.error("Import leads failed:", error);
+      console.warn("Import leads failed:", error);
       throw error;
     }
   };
@@ -159,7 +177,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       emitDataChange();
       return response.data;
     } catch (error) {
-      console.error("Create opportunity failed:", error);
+      console.warn("Create opportunity failed:", error);
       throw error;
     }
   };
@@ -179,7 +197,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
       emitDataChange();
       return response.data;
     } catch (error) {
-      console.error("Schedule demo failed:", error);
+      console.warn("Schedule demo failed:", error);
       return null;
     }
   };
@@ -212,3 +230,4 @@ export const usePipelineData = () => {
 
   return context;
 };
+

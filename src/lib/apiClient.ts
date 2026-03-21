@@ -14,9 +14,26 @@ type RequestOptions = {
 
 type AuthTokenStorage = "local" | "session";
 
-const getStoredToken = () =>
-  window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ??
-  window.localStorage.getItem(TOKEN_STORAGE_KEY);
+const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
+const isRootApiPath = (value: string) =>
+  value === "/api" ||
+  value.startsWith("/api/") ||
+  value === "/ai" ||
+  value.startsWith("/ai/") ||
+  value === "/alerts" ||
+  value.startsWith("/alerts/") ||
+  value === "/public" ||
+  value.startsWith("/public/");
+
+export const getStoredAuthToken = () => {
+  if (typeof window === "undefined") return null;
+  return (
+    window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ??
+    window.localStorage.getItem(TOKEN_STORAGE_KEY)
+  );
+};
+
+export const hasStoredAuthToken = () => Boolean(getStoredAuthToken());
 
 export const storeAuthToken = (token: string, storage: AuthTokenStorage = "local") => {
   if (storage === "session") {
@@ -47,7 +64,7 @@ const redirectToLogin = () => {
 };
 
 const ensureToken = async () => {
-  const existingToken = getStoredToken();
+  const existingToken = getStoredAuthToken();
   if (existingToken) return existingToken;
   redirectToLogin();
   throw new Error("Authentication required. Redirecting to login.");
@@ -77,7 +94,10 @@ export const apiRequest = async <T>(path: string, options: RequestOptions = {}):
     body = JSON.stringify(options.body);
   }
 
-  const url = `${API_BASE_URL}${path}`;
+  const url =
+    isAbsoluteUrl(path) || isRootApiPath(path)
+      ? path
+      : `${API_BASE_URL}${path}`;
   if (DEBUG_API) {
     console.debug("[API] Request", {
       url,
@@ -134,3 +154,4 @@ export const apiRequest = async <T>(path: string, options: RequestOptions = {}):
 
   return payload as T;
 };
+
