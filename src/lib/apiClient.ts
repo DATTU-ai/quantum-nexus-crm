@@ -1,6 +1,10 @@
-const BASE_URL =
+const BASE_URL = (
   import.meta.env.VITE_API_URL ||
-  "https://dattu-crm-backend.onrender.com";
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://dattu-crm-backend.onrender.com"
+)
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
 const TOKEN_STORAGE_KEY = "token";
 const RETURN_URL_KEY = "dattu.crm.returnUrl";
 
@@ -21,11 +25,8 @@ const buildApiUrl = (path: string) => {
     return path;
   }
 
-  const normalizedBaseUrl = BASE_URL.endsWith("/")
-    ? BASE_URL.slice(0, -1)
-    : BASE_URL;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${normalizedBaseUrl}${normalizedPath}`;
+  return `${BASE_URL}${normalizedPath}`;
 };
 
 const redirectToLogin = () => {
