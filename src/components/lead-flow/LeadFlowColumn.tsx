@@ -2,7 +2,7 @@ import { memo, useMemo, type DragEvent } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getLeadStageIndex } from "@/data/leadFlowMockData";
+import { getLeadStageIndex } from "@/lib/leadFlowUtils";
 import type { LeadFlowDropEdge, LeadFlowLead, LeadFlowStage } from "@/types/leadFlow";
 import LeadFlowCard from "./LeadFlowCard";
 import { formatINR } from "@/utils/currency";

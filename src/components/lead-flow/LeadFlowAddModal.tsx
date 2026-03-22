@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { buildLeadFlowLead } from "@/data/leadFlowMockData";
+import { buildLeadFlowLead } from "@/lib/leadFlowUtils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

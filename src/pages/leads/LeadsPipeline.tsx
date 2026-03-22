@@ -28,7 +28,7 @@ import CreateOpportunityModal from "@/components/pipeline/actions/CreateOpportun
 import ImportLeadsModal from "@/components/pipeline/actions/ImportLeadsModal";
 import ScheduleDemoModal from "@/components/pipeline/actions/ScheduleDemoModal";
 import { Button } from "@/components/ui/button";
-import { leadConversionStages, defaultPipelineFilters } from "@/data/pipelineMockData";
+import { defaultPipelineFilters, leadConversionStages } from "@/lib/pipelineDefaults";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { apiRequest } from "@/lib/apiClient";
 import { buildLeadAiInsight, buildFallbackLeadAiInsight, getLeadAiCacheSignature, leadNeedsFollowUp } from "@/lib/leadAi";

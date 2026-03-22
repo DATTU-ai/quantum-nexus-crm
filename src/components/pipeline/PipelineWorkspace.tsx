@@ -6,7 +6,7 @@ import KPIStatsBar from "@/components/pipeline/KPIStatsBar";
 import LeadDetailsDrawer from "@/components/pipeline/LeadDetailsDrawer";
 import PipelineBoard from "@/components/pipeline/PipelineBoard";
 import { Button } from "@/components/ui/button";
-import { defaultPipelineFilters } from "@/data/pipelineMockData";
+import { defaultPipelineFilters } from "@/lib/pipelineDefaults";
 import { leadSources, type DealValueFilter, type KPIStat, type PipelineDeal, type PipelineFilters, type Region } from "@/types/pipeline";
 
 interface PipelineWorkspaceAction {

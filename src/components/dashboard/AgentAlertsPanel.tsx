@@ -45,9 +45,7 @@ const AgentAlertsPanel = () => {
       }
 
       try {
-        const payload = await apiRequest<AgentAlertsPayload>("/alerts", {
-          skipAuth: true,
-        });
+        const payload = await apiRequest<AgentAlertsPayload>("/api/dashboard/alerts");
 
         if (!active) return;
         setData(payload);

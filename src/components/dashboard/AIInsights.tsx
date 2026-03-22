@@ -34,7 +34,7 @@ const AIInsights = () => {
     const loadInsights = async () => {
       setIsLoading(true);
       try {
-        const response = await apiRequest<InsightsPayload>("/insights");
+        const response = await apiRequest<InsightsPayload>("/api/insights");
         if (!active) return;
         setCards(response.cards ?? []);
         setError(null);
@@ -60,26 +60,24 @@ const AIInsights = () => {
   useEffect(() => {
     let active = true;
 
-    fetch("/ai/forecast")
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error("AI forecast unavailable");
-        }
-        return payload;
-      })
-      .then((payload) => {
+    const loadForecast = async () => {
+      try {
+        const payload = await apiRequest<{ forecast?: number }>("/ai/forecast", {
+          skipAuth: true,
+        });
         if (!active) return;
         const nextForecast = Number(payload?.forecast);
         setForecast(Number.isFinite(nextForecast) ? nextForecast : 0);
-      })
-      .catch((loadError) => {
+      } catch (loadError) {
         if (!active) return;
         if (import.meta.env.DEV) {
           console.warn("AI forecast load failed:", loadError);
         }
         setForecast(0);
-      });
+      }
+    };
+
+    void loadForecast();
 
     return () => {
       active = false;

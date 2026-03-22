@@ -3,11 +3,8 @@ import { useNavigate } from "react-router-dom";
 import QuantumBackground from "@/components/QuantumBackground";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { apiRequest, storeAuthToken } from "@/lib/apiClient";
-
-const RETURN_URL_KEY = "dattu.crm.returnUrl";
 const DEMO_EMAIL = import.meta.env.VITE_DEMO_USER_EMAIL || "admin@dattu.local";
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_USER_PASSWORD || "QuantumCRM!2026";
 
@@ -25,7 +22,6 @@ const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState(DEMO_EMAIL);
   const [password, setPassword] = useState(DEMO_PASSWORD);
-  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -41,16 +37,15 @@ const Login = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await apiRequest<LoginResponse>("/auth/login", {
+      const response = await apiRequest<LoginResponse>("/api/auth/login", {
         method: "POST",
         body: { email: trimmedEmail, password },
         skipAuth: true,
       });
 
-      storeAuthToken(response.token, rememberMe ? "local" : "session");
-      const returnUrl = window.sessionStorage.getItem(RETURN_URL_KEY) || "/";
-      window.sessionStorage.removeItem(RETURN_URL_KEY);
-      navigate(returnUrl, { replace: true });
+      window.localStorage.setItem("token", response.token);
+      storeAuthToken(response.token);
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {
@@ -94,15 +89,6 @@ const Login = () => {
                   placeholder="Your password"
                   autoComplete="current-password"
                 />
-              </div>
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <label className="flex items-center gap-2">
-                  <Checkbox
-                    checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
-                  />
-                  Remember me
-                </label>
               </div>
               {error ? (
                 <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

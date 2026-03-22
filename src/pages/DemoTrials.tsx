@@ -26,7 +26,7 @@ const DemoTrials = () => {
   useEffect(() => {
     const loadTrials = async () => {
       try {
-        const response = await apiRequest<{ data: DemoTrialRecord[] }>("/demo-trials");
+        const response = await apiRequest<{ data: DemoTrialRecord[] }>("/api/demo-trials");
         setTrialData(response.data ?? []);
       } catch (error) {
         console.warn("Demo trials load failed:", error);

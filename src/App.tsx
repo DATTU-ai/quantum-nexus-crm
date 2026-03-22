@@ -24,6 +24,7 @@ import SettingsPage from "./pages/settings/SettingsPage";
 import TasksPage from "./pages/tasks/TasksPage";
 import TeamManagement from "./pages/team/TeamManagement";
 import AuthRedirectHandler from "./components/AuthRedirectHandler";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -48,24 +49,26 @@ const App = () => (
         <AuthRedirectHandler />
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="leads" element={<LeadsPipeline />} />
-            <Route path="team" element={<TeamManagement />} />
-            <Route path="companies" element={<CompaniesPage />} />
-            <Route path="companies/:companyId" element={<CompanyDetailPage />} />
-            <Route path="opportunities" element={<OpportunitiesPipeline />} />
-            <Route path="demo-trials" element={<DemoTrials />} />
-            <Route path="orders" element={<OrdersContractsPage />} />
-            <Route path="orders/:orderId" element={<OrderDetailPage />} />
-            <Route path="work-orders" element={<OrdersContractsPage />} />
-            <Route path="renewals" element={<PlaceholderPage title="Renewals" />} />
-            <Route path="tasks" element={<TasksPage />} />
-            <Route path="ai-intelligence" element={<AiIntelligence />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="*" element={<NotFound />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<AppLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="leads" element={<LeadsPipeline />} />
+              <Route path="team" element={<TeamManagement />} />
+              <Route path="companies" element={<CompaniesPage />} />
+              <Route path="companies/:companyId" element={<CompanyDetailPage />} />
+              <Route path="opportunities" element={<OpportunitiesPipeline />} />
+              <Route path="demo-trials" element={<DemoTrials />} />
+              <Route path="orders" element={<OrdersContractsPage />} />
+              <Route path="orders/:orderId" element={<OrderDetailPage />} />
+              <Route path="work-orders" element={<OrdersContractsPage />} />
+              <Route path="renewals" element={<PlaceholderPage title="Renewals" />} />
+              <Route path="tasks" element={<TasksPage />} />
+              <Route path="ai-intelligence" element={<AiIntelligence />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>

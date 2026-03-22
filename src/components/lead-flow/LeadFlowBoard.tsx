@@ -5,7 +5,7 @@ import {
   cloneLeadFlowBoard,
   getLeadStageIndex,
   leadFlowSeedBoard,
-} from "@/data/leadFlowMockData";
+} from "@/lib/leadFlowUtils";
 import { formatINR } from "@/utils/currency";
 import type {
   LeadFlowBoardState,

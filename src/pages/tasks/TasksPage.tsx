@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { addDays, endOfDay, format, isAfter, isBefore, parseISO, startOfDay } from "date-fns";
 import { Plus } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -43,20 +43,19 @@ const TasksPage = () => {
     priority: "medium",
   });
 
-  useEffect(() => {
-    const loadTasks = async () => {
-      try {
-        const response = await apiRequest<ListResponse<TaskRecord[]>>("/tasks");
-        setTasks(response.data ?? []);
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn("Tasks load failed:", error);
-        }
-      }
-    };
-
-    void loadTasks();
+  const loadTasks = useCallback(async () => {
+    try {
+      const response = await apiRequest<ListResponse<TaskRecord[]>>("/api/tasks");
+      setTasks(response.data ?? []);
+    } catch (error) {
+      console.error("API ERROR:", error);
+      setTasks([]);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadTasks();
+  }, [loadTasks]);
 
   const dueFilter = searchParams.get("due")?.toLowerCase();
   const visibleTasks = useMemo(() => {
@@ -114,7 +113,7 @@ const TasksPage = () => {
       return;
     }
     try {
-      const response = await apiRequest<ListResponse<TaskRecord>>("/tasks", {
+      await apiRequest<ListResponse<TaskRecord>>("/api/tasks", {
         method: "POST",
         body: {
           title: form.title.trim(),
@@ -127,40 +126,38 @@ const TasksPage = () => {
           priority: form.priority,
         },
       });
-      setTasks((current) => [response.data, ...current]);
+      await loadTasks();
       setIsModalOpen(false);
       resetForm();
     } catch (error) {
-      if (import.meta.env.DEV) {
-        console.warn("Create task failed:", error);
-      }
+      console.error("API ERROR:", error);
     }
   };
 
   const updateTaskStatus = async (task: TaskRecord, status: string) => {
     try {
-      const response = await apiRequest<ListResponse<TaskRecord>>(`/tasks/${task.id}`, {
+      const response = await apiRequest<ListResponse<TaskRecord>>(`/api/tasks/${task.id}`, {
         method: "PATCH",
         body: { status },
       });
       setTasks((current) => current.map((item) => (item.id === task.id ? response.data : item)));
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.warn("Task update failed:", error);
+        console.error("API ERROR:", error);
       }
     }
   };
 
   const updateTaskPriority = async (task: TaskRecord, priority: string) => {
     try {
-      const response = await apiRequest<ListResponse<TaskRecord>>(`/tasks/${task.id}`, {
+      const response = await apiRequest<ListResponse<TaskRecord>>(`/api/tasks/${task.id}`, {
         method: "PATCH",
         body: { priority },
       });
       setTasks((current) => current.map((item) => (item.id === task.id ? response.data : item)));
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.warn("Task update failed:", error);
+        console.error("API ERROR:", error);
       }
     }
   };
@@ -308,7 +305,7 @@ const TasksPage = () => {
                 <TableRow key={task.id}>
                   <TableCell className="font-medium text-foreground">{task.title}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {task.entityType} � {task.entityId}
+                    {task.entityType} · {task.entityId}
                   </TableCell>
                   <TableCell>{task.assignedTo}</TableCell>
                   <TableCell>
@@ -352,5 +349,7 @@ const TasksPage = () => {
 };
 
 export default TasksPage;
+
+
 
 

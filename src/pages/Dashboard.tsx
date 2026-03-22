@@ -30,6 +30,7 @@ import AIInsights from "@/components/dashboard/AIInsights";
 import AgentAlertsPanel from "@/components/dashboard/AgentAlertsPanel";
 import SalesFunnel from "@/components/dashboard/SalesFunnel";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/apiClient";
 import { createAccentTone, themePalette } from "@/lib/theme";
 import type {
   DashboardRecentActivity,
@@ -324,31 +325,11 @@ const Dashboard = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const token =
-      window.localStorage.getItem("token") ||
-      window.localStorage.getItem("dattu.crm.token") ||
-      window.sessionStorage.getItem("token") ||
-      window.sessionStorage.getItem("dattu.crm.token");
 
-    fetch("/api/dashboard/summary", {
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : undefined,
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null);
-          const message =
-            payload && typeof payload === "object" && "message" in payload
-              ? String((payload as { message?: string }).message)
-              : "Dashboard data unavailable.";
-          throw new Error(message);
-        }
-        return response.json() as Promise<DashboardSummaryPayload>;
-      })
-      .then((payload) => {
+    const loadDashboardSummary = async () => {
+      try {
+        const payload = await apiRequest<DashboardSummaryPayload>("/api/dashboard/summary");
+
         if (cancelled) return;
         if (Array.isArray(payload) && payload.length === 0) {
           setData(null);
@@ -375,19 +356,18 @@ const Dashboard = () => {
         setError(null);
         setIsNoData(false);
         setData(normalized);
-      })
-      .catch((fetchError: unknown) => {
+      } catch (fetchError) {
         if (cancelled) return;
-        if (import.meta.env.DEV) {
-          console.warn("Dashboard summary load failed:", fetchError);
-        }
+        console.error("API ERROR:", fetchError);
         setIsNoData(false);
         setError("Dashboard data unavailable.");
-      })
-      .finally(() => {
+      } finally {
         if (cancelled) return;
         setIsLoading(false);
-      });
+      }
+    };
+
+    void loadDashboardSummary();
 
     return () => {
       cancelled = true;

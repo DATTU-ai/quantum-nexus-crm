@@ -40,11 +40,11 @@ const SettingsPage = () => {
     const loadSettings = async () => {
       try {
         const [leadResponse, opportunityResponse, templateResponse, currencyResponse, automationResponse] = await Promise.all([
-          apiRequest<ListResponse<PipelineStageRecord[]>>("/pipeline-stages?entityType=lead"),
-          apiRequest<ListResponse<PipelineStageRecord[]>>("/pipeline-stages?entityType=opportunity"),
-          apiRequest<ListResponse<EmailTemplateRecord[]>>("/email-templates"),
-          apiRequest<ListResponse<SettingRecord>>("/settings/currency"),
-          apiRequest<ListResponse<AutomationRuleRecord[]>>("/automation-rules"),
+          apiRequest<ListResponse<PipelineStageRecord[]>>("/api/pipeline-stages?entityType=lead"),
+          apiRequest<ListResponse<PipelineStageRecord[]>>("/api/pipeline-stages?entityType=opportunity"),
+          apiRequest<ListResponse<EmailTemplateRecord[]>>("/api/email-templates"),
+          apiRequest<ListResponse<SettingRecord>>("/api/settings/currency"),
+          apiRequest<ListResponse<AutomationRuleRecord[]>>("/api/automation-rules"),
         ]);
         setLeadStages((leadResponse.data ?? []).sort((left, right) => left.order - right.order));
         setOpportunityStages((opportunityResponse.data ?? []).sort((left, right) => left.order - right.order));
@@ -73,7 +73,7 @@ const SettingsPage = () => {
 
   const saveStage = async (entityType: "lead" | "opportunity", stage: PipelineStageRecord) => {
     try {
-      const response = await apiRequest<ListResponse<PipelineStageRecord>>(`/pipeline-stages/${stage.id}`, {
+      const response = await apiRequest<ListResponse<PipelineStageRecord>>(`/api/pipeline-stages/${stage.id}`, {
         method: "PATCH",
         body: {
           name: stage.name,
@@ -96,7 +96,7 @@ const SettingsPage = () => {
     if (!name) return;
 
     try {
-      const response = await apiRequest<ListResponse<PipelineStageRecord>>("/pipeline-stages", {
+      const response = await apiRequest<ListResponse<PipelineStageRecord>>("/api/pipeline-stages", {
         method: "POST",
         body: { name, entityType },
       });
@@ -112,7 +112,7 @@ const SettingsPage = () => {
 
   const deleteStage = async (entityType: "lead" | "opportunity", id: string) => {
     try {
-      await apiRequest(`/pipeline-stages/${id}`, { method: "DELETE" });
+      await apiRequest(`/api/pipeline-stages/${id}`, { method: "DELETE" });
       const setter = entityType === "lead" ? setLeadStages : setOpportunityStages;
       setter((current) => current.filter((stage) => stage.id !== id));
     } catch (error) {
@@ -132,7 +132,7 @@ const SettingsPage = () => {
 
   const saveTemplate = async (template: EmailTemplateRecord) => {
     try {
-      const response = await apiRequest<ListResponse<EmailTemplateRecord>>(`/email-templates/${template.id}`, {
+      const response = await apiRequest<ListResponse<EmailTemplateRecord>>(`/api/email-templates/${template.id}`, {
         method: "PATCH",
         body: {
           name: template.name,
@@ -153,7 +153,7 @@ const SettingsPage = () => {
 
   const deleteTemplate = async (id: string) => {
     try {
-      await apiRequest(`/email-templates/${id}`, { method: "DELETE" });
+      await apiRequest(`/api/email-templates/${id}`, { method: "DELETE" });
       setEmailTemplates((current) => current.filter((template) => template.id !== id));
     } catch (error) {
       console.warn("Delete email template failed:", error);
@@ -163,7 +163,7 @@ const SettingsPage = () => {
   const createTemplate = async () => {
     if (!newTemplate.name.trim() || !newTemplate.subject.trim() || !newTemplate.body.trim()) return;
     try {
-      const response = await apiRequest<ListResponse<EmailTemplateRecord>>("/email-templates", {
+      const response = await apiRequest<ListResponse<EmailTemplateRecord>>("/api/email-templates", {
         method: "POST",
         body: newTemplate,
       });
@@ -176,7 +176,7 @@ const SettingsPage = () => {
 
   const saveCurrency = async () => {
     try {
-      await apiRequest<ListResponse<SettingRecord>>("/settings/currency", {
+      await apiRequest<ListResponse<SettingRecord>>("/api/settings/currency", {
         method: "PUT",
         body: { value: currency },
       });
@@ -187,7 +187,7 @@ const SettingsPage = () => {
 
   const updateAutomationRule = async (rule: AutomationRuleRecord) => {
     try {
-      const response = await apiRequest<ListResponse<AutomationRuleRecord>>(`/automation-rules/${rule.id}`, {
+      const response = await apiRequest<ListResponse<AutomationRuleRecord>>(`/api/automation-rules/${rule.id}`, {
         method: "PATCH",
         body: {
           name: rule.name,
@@ -208,7 +208,7 @@ const SettingsPage = () => {
 
   const runAutomation = async () => {
     try {
-      await apiRequest("/automation-rules/run", { method: "POST" });
+      await apiRequest("/api/automation-rules/run", { method: "POST" });
     } catch (error) {
       console.warn("Automation run failed:", error);
     }

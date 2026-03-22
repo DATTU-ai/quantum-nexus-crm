@@ -228,13 +228,13 @@ const TeamManagement = () => {
 
   const handleSubmit = async (input: CreateTeamMemberInput | UpdateTeamMemberInput) => {
     if (editingMember) {
-      const response = await apiRequest<{ data: TeamMember }>(`/team/${editingMember.id}`, {
+      const response = await apiRequest<{ data: TeamMember }>(`/api/team/${editingMember.id}`, {
         method: "PATCH",
         body: input,
       });
       toast.success(`${response.data.name} updated.`);
     } else {
-      const response = await apiRequest<{ data: TeamMember }>("/team", {
+      const response = await apiRequest<{ data: TeamMember }>("/api/team", {
         method: "POST",
         body: input,
       });
@@ -251,7 +251,7 @@ const TeamManagement = () => {
     if (!confirmed) return;
 
     try {
-      const response = await apiRequest<{ data: TeamMember }>(`/team/${member.id}`, {
+      const response = await apiRequest<{ data: TeamMember }>(`/api/team/${member.id}`, {
         method: "DELETE",
       });
       toast.success(`${response.data.name} deactivated.`);

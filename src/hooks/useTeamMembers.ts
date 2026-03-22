@@ -8,13 +8,12 @@ type TeamListResponse = {
 
 export const useTeamMembers = (options?: { includeInactive?: boolean }) => {
   const includeInactive = options?.includeInactive ?? false;
-  const hasAuthToken = hasStoredAuthToken();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadTeamMembers = useCallback(async () => {
-    if (!hasAuthToken) {
+    if (!hasStoredAuthToken()) {
       setTeamMembers([]);
       setError(null);
       setIsLoading(false);
@@ -25,7 +24,7 @@ export const useTeamMembers = (options?: { includeInactive?: boolean }) => {
     setError(null);
     try {
       const query = includeInactive ? "?includeInactive=true" : "";
-      const response = await apiRequest<TeamListResponse>(`/team${query}`);
+      const response = await apiRequest<TeamListResponse>(`/api/team${query}`);
       setTeamMembers(response.data ?? []);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to load team members.";
@@ -33,7 +32,7 @@ export const useTeamMembers = (options?: { includeInactive?: boolean }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [hasAuthToken, includeInactive]);
+  }, [includeInactive]);
 
   useEffect(() => {
     void loadTeamMembers();

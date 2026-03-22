@@ -189,7 +189,7 @@ const LeadDetailsDrawer = ({
       setIsLoadingTasks(true);
       try {
         const response = await apiRequest<{ data: TaskRecord[] }>(
-          `/tasks?entityType=${entityType}&entityId=${detailLead.id}`,
+          `/api/tasks?entityType=${entityType}&entityId=${detailLead.id}`,
         );
         setTasks(Array.isArray(response?.data) ? response.data : []);
       } catch (error) {
@@ -238,15 +238,12 @@ const LeadDetailsDrawer = ({
         stage: detailLead.stage || "",
       };
 
-      const res = await fetch("/ai/generate-email", {
+      const data = await apiRequest<{ email?: string }>("/ai/generate-email", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ lead: leadPayload }),
+        body: { lead: leadPayload },
+        skipAuth: true,
       });
 
-      const data = await res.json().catch(() => ({}));
       setGeneratedEmail(typeof data?.email === "string" ? data.email : "");
     } catch (error) {
       if (import.meta.env.DEV) {

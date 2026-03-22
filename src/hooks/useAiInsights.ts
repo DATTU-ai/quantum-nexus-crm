@@ -43,7 +43,7 @@ export const useAiInsights = (entityId: string | null) => {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await apiRequest<AiInsightsResponse>(`/ai/insights/${entityId}`);
+        const response = await apiRequest<AiInsightsResponse>(`/api/ai/insights/${entityId}`);
         if (isActive) {
           setInsights(response.data);
         }

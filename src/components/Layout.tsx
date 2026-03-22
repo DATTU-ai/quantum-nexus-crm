@@ -103,7 +103,7 @@ const Layout = ({ children }: LayoutProps) => {
     const loadSearchResults = async () => {
       try {
         const response = await apiRequest<{ data: SearchResultRecord[] }>(
-          `/search?q=${encodeURIComponent(deferredQuery)}`,
+          `/api/search?q=${encodeURIComponent(deferredQuery)}`,
         );
         setResults(response.data ?? []);
       } catch (error) {
@@ -126,7 +126,7 @@ const Layout = ({ children }: LayoutProps) => {
     let active = true;
     const fetchNotifications = async (silent = false) => {
       try {
-        const response = await apiRequest<{ data: NotificationRecord[] }>("/notifications?scope=mine");
+        const response = await apiRequest<{ data: NotificationRecord[] }>("/api/notifications?scope=mine");
         if (!active) return;
         setNotifications(response.data ?? []);
       } catch (error) {
@@ -179,7 +179,7 @@ const Layout = ({ children }: LayoutProps) => {
   const markNotificationRead = async (notification: NotificationRecord) => {
     if (notification.read) return;
     try {
-      await apiRequest<{ data: NotificationRecord }>(`/notifications/${notification.id}`, {
+      await apiRequest<{ data: NotificationRecord }>(`/api/notifications/${notification.id}`, {
         method: "PATCH",
         body: { read: true },
       });

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import {
   company_api_endpoints,
@@ -85,25 +85,27 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
   const [contacts, setContacts] = useState<CompanyContactRecord[]>([]);
   const [companyDetails, setCompanyDetails] = useState<Record<string, CompanyDetailRecord>>({});
 
-  useEffect(() => {
-    const loadCompanies = async () => {
-      if (!hasStoredAuthToken()) {
-        setCompanies([]);
-        setContacts([]);
-        return;
-      }
+  const loadCompanies = useCallback(async () => {
+    if (!hasStoredAuthToken()) {
+      setCompanies([]);
+      setContacts([]);
+      return;
+    }
 
-      try {
-        const response = await apiRequest<CompaniesListResponse>(company_api_endpoints.companies);
-        setCompanies(response.data.companies ?? []);
-        setContacts(response.data.contacts ?? []);
-      } catch (error) {
-        console.warn("Companies load failed:", error);
-      }
-    };
-
-    void loadCompanies();
+    try {
+      const response = await apiRequest<CompaniesListResponse>(company_api_endpoints.companies);
+      setCompanies(response.data.companies ?? []);
+      setContacts(response.data.contacts ?? []);
+    } catch (error) {
+      console.error("API ERROR:", error);
+      setCompanies([]);
+      setContacts([]);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadCompanies();
+  }, [loadCompanies]);
 
   const account_owners = useMemo(
     () =>
@@ -190,7 +192,7 @@ export const CompaniesProvider = ({ children }: { children: ReactNode }) => {
         method: "POST",
         body: input,
       });
-      setCompanies((current) => [response.data, ...current]);
+      await loadCompanies();
       return response.data;
     } catch (error) {
       console.warn("Create company failed:", error);

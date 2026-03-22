@@ -30,7 +30,7 @@ const AiIntelligence = () => {
   useEffect(() => {
     const loadAnalytics = async () => {
       try {
-        const response = await apiRequest<AiIntelligencePayload>("/ai-intelligence");
+        const response = await apiRequest<AiIntelligencePayload>("/api/ai-intelligence");
         setPayload({
           winProbData: response.winProbData ?? [],
           revenueForecast: response.revenueForecast ?? [],

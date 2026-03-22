@@ -1,14 +1,11 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
+const BASE_URL =
   import.meta.env.VITE_API_URL ||
-  "https://dattu-crm-backend.onrender.com/api";
-const TOKEN_STORAGE_KEY = "dattu.crm.token";
+  "https://dattu-crm-backend.onrender.com";
+const TOKEN_STORAGE_KEY = "token";
 const RETURN_URL_KEY = "dattu.crm.returnUrl";
-const AUTH_REDIRECT_EVENT = "crm:auth-required";
-const DEBUG_API = import.meta.env.DEV || import.meta.env.VITE_DEBUG_API === "true";
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   formData?: FormData;
   headers?: HeadersInit;
@@ -18,141 +15,96 @@ type RequestOptions = {
 type AuthTokenStorage = "local" | "session";
 
 const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
-const isRootApiPath = (value: string) =>
-  value === "/api" ||
-  value.startsWith("/api/") ||
-  value === "/ai" ||
-  value.startsWith("/ai/") ||
-  value === "/alerts" ||
-  value.startsWith("/alerts/");
+
+const buildApiUrl = (path: string) => {
+  if (isAbsoluteUrl(path)) {
+    return path;
+  }
+
+  const normalizedBaseUrl = BASE_URL.endsWith("/")
+    ? BASE_URL.slice(0, -1)
+    : BASE_URL;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBaseUrl}${normalizedPath}`;
+};
+
+const redirectToLogin = () => {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname === "/login") return;
+
+  const returnUrl = `${window.location.pathname}${window.location.search}`;
+  window.sessionStorage.setItem(RETURN_URL_KEY, returnUrl);
+  window.location.assign("/login");
+};
 
 export const getStoredAuthToken = () => {
   if (typeof window === "undefined") return null;
-  return (
-    window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ??
-    window.localStorage.getItem(TOKEN_STORAGE_KEY)
-  );
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
 };
 
 export const hasStoredAuthToken = () => Boolean(getStoredAuthToken());
 
-export const storeAuthToken = (token: string, storage: AuthTokenStorage = "local") => {
-  if (storage === "session") {
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-  } else {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-  }
+export const storeAuthToken = (token: string, _storage: AuthTokenStorage = "local") => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
 };
 
 export const clearAuthToken = () => {
+  if (typeof window === "undefined") return;
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-  window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-};
-
-const maskToken = (value?: string | null) => {
-  if (!value) return "missing";
-  if (value.length <= 10) return `${value.slice(0, 4)}...`;
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-};
-
-const redirectToLogin = () => {
-  if (window.location.pathname === "/login") return;
-  const returnUrl = `${window.location.pathname}${window.location.search}`;
-  window.sessionStorage.setItem(RETURN_URL_KEY, returnUrl);
-  window.dispatchEvent(new CustomEvent(AUTH_REDIRECT_EVENT));
-};
-
-const ensureToken = async () => {
-  const existingToken = getStoredAuthToken();
-  if (existingToken) return existingToken;
-  redirectToLogin();
-  throw new Error("Authentication required. Redirecting to login.");
-};
-
-const headersToLog = (headers: Headers) => {
-  const entries = Array.from(headers.entries());
-  return entries.reduce<Record<string, string>>((accumulator, [key, value]) => {
-    accumulator[key] = key.toLowerCase() === "authorization" ? maskToken(value) : value;
-    return accumulator;
-  }, {});
 };
 
 export const apiRequest = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
-  const headers = new Headers(options.headers);
+  try {
+    const token =
+      typeof window === "undefined" ? null : window.localStorage.getItem("token");
+    const headers = new Headers(options.headers);
 
-  if (!options.skipAuth) {
-    const token = await ensureToken();
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  let body: BodyInit | undefined;
-  if (options.formData) {
-    body = options.formData;
-  } else if (options.body !== undefined) {
-    headers.set("Content-Type", "application/json");
-    body = JSON.stringify(options.body);
-  }
-
-  const url =
-    isAbsoluteUrl(path) || isRootApiPath(path)
-      ? path
-      : `${API_BASE_URL}${path}`;
-  if (DEBUG_API) {
-    console.debug("[API] Request", {
-      url,
-      method: options.method || "GET",
-      headers: headersToLog(headers),
-    });
-  }
-
-  const response = await fetch(url, {
-    method: options.method || "GET",
-    headers,
-    body,
-  });
-
-  const contentType = response.headers.get("content-type") || "";
-  const isJson = contentType.includes("application/json");
-  let payload: unknown = undefined;
-
-  if (response.status !== 204) {
-    if (isJson) {
-      try {
-        payload = await response.json();
-      } catch (error) {
-        if (response.ok) {
-          throw error;
-        }
-        payload = undefined;
-      }
-    } else {
-      payload = await response.text().catch(() => undefined);
+    if (!options.formData && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
     }
-  }
 
-  if (DEBUG_API) {
-    console.debug("[API] Response", {
-      url,
-      status: response.status,
-      payload,
+    headers.set("Authorization", token ? `Bearer ${token}` : "");
+
+    let body: BodyInit | undefined;
+    if (options.formData) {
+      body = options.formData;
+    } else if (options.body !== undefined) {
+      body = JSON.stringify(options.body);
+    }
+
+    const response = await fetch(buildApiUrl(path), {
+      method: options.method || "GET",
+      headers,
+      body,
     });
-  }
 
-  if (response.status === 401 && !options.skipAuth) {
-    clearAuthToken();
-    redirectToLogin();
-  }
+    if (response.status === 401) {
+      clearAuthToken();
+      redirectToLogin();
+    }
 
-  if (!response.ok) {
-    const message =
-      isJson && payload && typeof payload === "object" && "message" in payload
-        ? String((payload as { message?: string }).message)
-        : `Request failed with status ${response.status}.`;
-    throw new Error(message);
-  }
+    const contentType = response.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+    const payload =
+      response.status === 204
+        ? undefined
+        : isJson
+          ? await response.json().catch(() => undefined)
+          : await response.text().catch(() => undefined);
 
-  return payload as T;
+    if (!response.ok) {
+      const message =
+        isJson && payload && typeof payload === "object" && "message" in payload
+          ? String((payload as { message?: string }).message)
+          : `Request failed with status ${response.status}.`;
+      throw new Error(message);
+    }
+
+    return payload as T;
+  } catch (err) {
+    console.error("API ERROR:", err);
+    throw err;
+  }
 };
 

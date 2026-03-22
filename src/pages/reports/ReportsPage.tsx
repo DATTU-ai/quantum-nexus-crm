@@ -46,9 +46,9 @@ const ReportsPage = () => {
     const loadReports = async () => {
       try {
         const [sales, revenue, leads] = await Promise.all([
-          apiRequest<SalesPerformanceReport>("/reports/sales-performance"),
-          apiRequest<RevenueForecastReport>("/reports/revenue-forecast"),
-          apiRequest<LeadConversionReport>("/reports/lead-conversion"),
+          apiRequest<SalesPerformanceReport>("/api/reports/sales-performance"),
+          apiRequest<RevenueForecastReport>("/api/reports/revenue-forecast"),
+          apiRequest<LeadConversionReport>("/api/reports/lead-conversion"),
         ]);
         setSalesReport(sales);
         setRevenueReport(revenue);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { apiRequest, hasStoredAuthToken } from "@/lib/apiClient";
 import { pipeline_api_endpoints } from "@/lib/pipelineApi";
 import { normalizeLeadRecord, type PublicLeadResponseItem } from "@/lib/publicLeadApi";
@@ -44,39 +44,39 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
   const [leadRecords, setLeadRecords] = useState<PipelineDeal[]>([]);
   const [opportunityRecords, setOpportunityRecords] = useState<PipelineDeal[]>([]);
 
-  useEffect(() => {
-    const loadPipeline = async () => {
-      const hasAuthToken = hasStoredAuthToken();
-
-      try {
-        const leadResponse = await apiRequest<ListResponse<PublicLeadResponseItem>>(
-          pipeline_api_endpoints.publicLeads,
-          { skipAuth: true },
-        );
-        setLeadRecords((leadResponse.data ?? []).map(normalizeLeadRecord));
-      } catch (error) {
-        console.warn("Lead pipeline load failed:", error);
-        setLeadRecords([]);
-      }
-
-      if (!hasAuthToken) {
-        setOpportunityRecords([]);
-        return;
-      }
-
-      try {
-        const opportunityResponse = await apiRequest<ListResponse<PipelineDeal>>(
-          pipeline_api_endpoints.opportunities,
-        );
-        setOpportunityRecords(opportunityResponse.data ?? []);
-      } catch (error) {
-        console.warn("Opportunity pipeline load failed:", error);
-        setOpportunityRecords([]);
-      }
-    };
-
-    void loadPipeline();
+  const loadLeadRecords = useCallback(async () => {
+    try {
+      const leadResponse = await apiRequest<ListResponse<PublicLeadResponseItem>>(
+        pipeline_api_endpoints.publicLeads,
+      );
+      setLeadRecords((leadResponse.data ?? []).map(normalizeLeadRecord));
+    } catch (error) {
+      console.error("API ERROR:", error);
+      setLeadRecords([]);
+    }
   }, []);
+
+  const loadOpportunityRecords = useCallback(async () => {
+    if (!hasStoredAuthToken()) {
+      setOpportunityRecords([]);
+      return;
+    }
+
+    try {
+      const opportunityResponse = await apiRequest<ListResponse<PipelineDeal>>(
+        pipeline_api_endpoints.opportunities,
+      );
+      setOpportunityRecords(opportunityResponse.data ?? []);
+    } catch (error) {
+      console.error("API ERROR:", error);
+      setOpportunityRecords([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadLeadRecords();
+    void loadOpportunityRecords();
+  }, [loadLeadRecords, loadOpportunityRecords]);
 
   const moveLead = async (dealId: string, targetStage: LeadPipelineStage) => {
     try {
@@ -124,8 +124,8 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
           method: "POST",
         },
       );
-      setLeadRecords((current) => current.filter((record) => record.id !== dealId));
-      setOpportunityRecords((current) => [response.data, ...current]);
+      await loadLeadRecords();
+      await loadOpportunityRecords();
       emitDataChange();
       return response.data;
     } catch (error) {
@@ -140,7 +140,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
         method: "POST",
         body: input,
       });
-      setLeadRecords((current) => [response.data, ...current]);
+      await loadLeadRecords();
       emitDataChange();
       return response.data;
     } catch (error) {
@@ -155,7 +155,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
         method: "POST",
         body: input,
       });
-      setLeadRecords((current) => [...response.data, ...current]);
+      await loadLeadRecords();
       emitDataChange();
       return response.data;
     } catch (error) {
@@ -173,7 +173,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
           body: input,
         },
       );
-      setOpportunityRecords((current) => [response.data, ...current]);
+      await loadOpportunityRecords();
       emitDataChange();
       return response.data;
     } catch (error) {
@@ -191,9 +191,7 @@ export const PipelineProvider = ({ children }: { children: ReactNode }) => {
           body: input,
         },
       );
-      setLeadRecords((current) =>
-        current.map((record) => (record.id === input.leadId ? response.data : record)),
-      );
+      await loadLeadRecords();
       emitDataChange();
       return response.data;
     } catch (error) {

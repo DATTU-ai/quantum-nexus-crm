@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CalendarClock, Download, FileStack, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
@@ -6,7 +6,9 @@ import {
   PipelineWorkspace,
   usePipelineData,
 } from "@/components/pipeline";
-import { opportunityClosedStages } from "@/data/pipelineMockData";
+import CreateOpportunityModal from "@/components/pipeline/actions/CreateOpportunityModal";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
+import { opportunityClosedStages } from "@/lib/pipelineDefaults";
 import {
   opportunityPipelineStages,
   type KPIStat,
@@ -14,7 +16,9 @@ import {
 } from "@/types/pipeline";
 
 const OpportunitiesPipeline = () => {
-  const { moveOpportunity, opportunityRecords } = usePipelineData();
+  const { createOpportunity, leadRecords, moveOpportunity, opportunityRecords } = usePipelineData();
+  const { teamMembers } = useTeamMembers();
+  const [isCreateOpportunityOpen, setIsCreateOpportunityOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const stageParam = searchParams.get("stage")?.toLowerCase() ?? "";
   const focusId = searchParams.get("focus");
@@ -44,6 +48,17 @@ const OpportunitiesPipeline = () => {
 
   const stageGroup = stageGroupMap[stageParam];
   const mappedStage = stageSlugMap[stageParam] as OpportunityPipelineStage | undefined;
+  const salespeople = useMemo(
+    () =>
+      [
+        ...new Set([
+          ...teamMembers.filter((member) => member.active).map((member) => member.name),
+          ...leadRecords.map((lead) => lead.assignedSalesperson),
+          ...opportunityRecords.map((record) => record.assignedSalesperson),
+        ]),
+      ].sort((left, right) => left.localeCompare(right)),
+    [leadRecords, opportunityRecords, teamMembers],
+  );
 
   const displayRecords = useMemo(() => {
     if (stageGroup?.length) {
@@ -150,43 +165,52 @@ const OpportunitiesPipeline = () => {
   ];
 
   return (
-    <PipelineWorkspace
-      title="Revenue Opportunities Pipeline"
-      subtitle="Track active deals from proposal to purchase order"
-      boardTitle="Opportunities Revenue Pipeline"
-      boardSubtitle="Advance revenue opportunities from proposal design through approval, PO, and close"
-      records={displayRecords}
-      stages={opportunityPipelineStages}
-      kpiStats={kpiStats}
-      initialFilters={mappedStage ? { stage: mappedStage } : undefined}
-      focusId={focusId}
-      onMoveRecord={(dealId, targetStage) =>
-        moveOpportunity(dealId, targetStage as OpportunityPipelineStage)
-      }
-      actions={[
-        {
-          label: "Add Opportunity",
-          icon: Plus,
-          variant: "default",
-          onClick: () => toast.info("Add Opportunity workflow is not wired yet."),
-        },
-        {
-          label: "Import Opportunities",
-          icon: Download,
-          onClick: () => toast.info("Opportunity import workflow is not wired yet."),
-        },
-        {
-          label: "Generate Proposal",
-          icon: FileStack,
-          onClick: () => toast.info("Proposal generation workflow is not wired yet."),
-        },
-        {
-          label: "Schedule Review",
-          icon: CalendarClock,
-          onClick: () => toast.info("Review scheduling workflow is not wired yet."),
-        },
-      ]}
-    />
+    <>
+      <PipelineWorkspace
+        title="Revenue Opportunities Pipeline"
+        subtitle="Track active deals from proposal to purchase order"
+        boardTitle="Opportunities Revenue Pipeline"
+        boardSubtitle="Advance revenue opportunities from proposal design through approval, PO, and close"
+        records={displayRecords}
+        stages={opportunityPipelineStages}
+        kpiStats={kpiStats}
+        initialFilters={mappedStage ? { stage: mappedStage } : undefined}
+        focusId={focusId}
+        onMoveRecord={(dealId, targetStage) =>
+          moveOpportunity(dealId, targetStage as OpportunityPipelineStage)
+        }
+        actions={[
+          {
+            label: "Add Opportunity",
+            icon: Plus,
+            variant: "default",
+            onClick: () => setIsCreateOpportunityOpen(true),
+          },
+          {
+            label: "Import Opportunities",
+            icon: Download,
+            onClick: () => toast.info("Opportunity import workflow is not wired yet."),
+          },
+          {
+            label: "Generate Proposal",
+            icon: FileStack,
+            onClick: () => toast.info("Proposal generation workflow is not wired yet."),
+          },
+          {
+            label: "Schedule Review",
+            icon: CalendarClock,
+            onClick: () => toast.info("Review scheduling workflow is not wired yet."),
+          },
+        ]}
+      />
+      <CreateOpportunityModal
+        open={isCreateOpportunityOpen}
+        onOpenChange={setIsCreateOpportunityOpen}
+        salespeople={salespeople}
+        leadOptions={leadRecords}
+        onSubmit={createOpportunity}
+      />
+    </>
   );
 };
 

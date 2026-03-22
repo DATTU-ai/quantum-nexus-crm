@@ -100,7 +100,7 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
       setIsLoading(true);
       try {
         const response = await apiRequest<{ data: InteractionRecord[] }>(
-          `/interactions/${entityType}/${entityId}`,
+          `/api/interactions/${entityType}/${entityId}`,
         );
         if (!active) return;
         setInteractions(response.data ?? []);
@@ -177,7 +177,7 @@ const InteractionTimeline = ({ entityType, entityId }: InteractionTimelineProps)
     setIsSubmitting(true);
     try {
       const nextFollowUpDate = form.nextFollowUp ? new Date(form.nextFollowUp) : null;
-      await apiRequest<{ data: InteractionRecord }>("/interactions", {
+      await apiRequest<{ data: InteractionRecord }>("/api/interactions", {
         method: "POST",
         body: {
           entityType,
